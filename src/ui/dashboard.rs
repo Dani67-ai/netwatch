@@ -376,8 +376,9 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         .block(
             Block::default()
                 .title(" Health ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .title_style(Style::default().fg(Color::Cyan))
+                .borders(Borders::LEFT)
+                .border_style(Style::default().fg(Color::Cyan)),
         );
 
     f.render_widget(health, area);
@@ -439,8 +440,9 @@ fn rtt_heatmap_spans(history: &[Option<f64>], width: usize) -> Vec<Span<'static>
 fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(" Latency Heatmap ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .title_style(Style::default().fg(Color::Cyan))
+        .borders(Borders::LEFT)
+        .border_style(Style::default().fg(Color::Cyan));
     let inner = block.inner(area);
     f.render_widget(block, area);
 

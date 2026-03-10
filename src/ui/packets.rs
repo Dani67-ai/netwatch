@@ -123,6 +123,14 @@ fn build_packets_header_line(app: &App, extra: Vec<Span<'static>>) -> Line<'stat
     Line::from(spans)
 }
 
+fn truncate_info(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..max - 1])
+    }
+}
+
 fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rect) {
     let header = Row::new(vec![
         Cell::from("!").style(Style::default().fg(Color::Cyan).bold()),
@@ -217,7 +225,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
                 Cell::from(pkt.protocol.clone()).style(proto_style),
                 Cell::from(pkt.length.to_string()),
                 Cell::from(stream_label).style(Style::default().fg(Color::DarkGray)),
-                Cell::from(pkt.info.clone()),
+                Cell::from(truncate_info(&pkt.info, 40)),
             ])
             .style(row_style)
         })

@@ -200,8 +200,9 @@ fn render_legend(f: &mut Frame, area: Rect) {
     .block(
         Block::default()
             .title(" Legend ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .title_style(Style::default().fg(Color::Cyan))
+            .borders(Borders::LEFT)
+            .border_style(Style::default().fg(Color::Cyan)),
     );
     f.render_widget(legend, area);
 }
@@ -223,8 +224,8 @@ fn render_summary(f: &mut Frame, app: &App, area: Rect) {
     ]))
     .block(
         Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .borders(Borders::LEFT)
+            .border_style(Style::default().fg(Color::Cyan)),
     );
     f.render_widget(summary, area);
 }

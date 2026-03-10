@@ -121,7 +121,7 @@ fn render_protocol_table(f: &mut Frame, app: &App, stats: &Stats, area: Rect) {
                 Cell::from(format!("{:.1}%", pkt_pct)),
                 Cell::from(widgets::format_bytes_total(ps.bytes)),
                 Cell::from(format!("{:.1}%", byte_pct)),
-                Cell::from(bar_visual(pkt_pct)).style(Style::default().fg(Color::Green)),
+                Cell::from(bar_visual(pkt_pct)).style(proto_style),
             ])
         })
         .collect();
@@ -162,8 +162,9 @@ fn render_summary(f: &mut Frame, stats: &Stats, area: Rect) {
     .block(
         Block::default()
             .title(" Summary ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .title_style(Style::default().fg(Color::Cyan))
+            .borders(Borders::LEFT)
+            .border_style(Style::default().fg(Color::Cyan)),
     );
     f.render_widget(summary, area);
 }
