@@ -630,6 +630,19 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                                     app.settings_cursor += 1;
                                 }
                             }
+                            KeyCode::Left | KeyCode::Right if app.settings_cursor == 0 => {
+                                let names = crate::theme::THEME_NAMES;
+                                let current = names.iter().position(|&n| n == app.user_config.theme).unwrap_or(0);
+                                let next = if key.code == KeyCode::Right {
+                                    (current + 1) % names.len()
+                                } else {
+                                    (current + names.len() - 1) % names.len()
+                                };
+                                app.user_config.theme = names[next].to_string();
+                                app.theme = crate::theme::by_name(names[next]);
+                                app.settings_status = Some(format!("Theme: {}", names[next]));
+                                app.settings_status_tick = 0;
+                            }
                             KeyCode::Enter => {
                                 app.settings_editing = true;
                                 app.settings_edit_buf = ui::settings::get_edit_value(
@@ -716,6 +729,13 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                     app.submit_insights_snapshot();
                 }
                 KeyCode::Char('g') => app.show_geo = !app.show_geo,
+                KeyCode::Char('t') if app.current_tab != Tab::Timeline => {
+                    let names = crate::theme::THEME_NAMES;
+                    let current = names.iter().position(|&n| n == app.theme.name).unwrap_or(0);
+                    let next = (current + 1) % names.len();
+                    app.user_config.theme = names[next].to_string();
+                    app.theme = crate::theme::by_name(names[next]);
+                },
                 KeyCode::Char(',') => {
                     app.show_settings = !app.show_settings;
                     app.settings_editing = false;

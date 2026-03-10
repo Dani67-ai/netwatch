@@ -82,7 +82,8 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(key_line("a", "Request AI analysis (from any tab)"));
     lines.push(key_line("?", "Toggle this help overlay"));
     lines.push(key_line("g", "Toggle GeoIP location display"));
-    lines.push(key_line(",", "Open settings menu"));
+    lines.push(key_line("t", "Cycle theme (dark/light/solarized/dracula/nord)"));
+    lines.push(key_line(",", "Open settings menu (←→ to cycle theme)"));
     lines.push(Line::raw(""));
 
     // DASHBOARD

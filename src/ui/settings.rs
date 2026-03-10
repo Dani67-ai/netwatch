@@ -139,6 +139,8 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
         let value_display = if is_editing {
             format!("{}▏", app.settings_edit_buf)
+        } else if i == 0 && is_selected {
+            format!("◀ {} ▶", row.value)
         } else {
             row.value.clone()
         };
@@ -183,6 +185,17 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(":Apply  "),
             Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Cancel"),
+        ]
+    } else if app.settings_cursor == 0 {
+        vec![
+            Span::styled("←→", Style::default().fg(app.theme.key_hint).bold()),
+            Span::raw(":Theme  "),
+            Span::styled("↑↓", Style::default().fg(app.theme.key_hint).bold()),
+            Span::raw(":Navigate  "),
+            Span::styled("S", Style::default().fg(app.theme.key_hint).bold()),
+            Span::raw(":Save  "),
+            Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
+            Span::raw(":Close"),
         ]
     } else {
         vec![
