@@ -267,35 +267,36 @@ fn build_time_axis(window_secs: u64, label_width: usize, bar_width: usize) -> Li
     ];
 
     // The axis goes left=now, right=oldest
-    // Place "now" at position 0, then ticks at regular intervals
-    let mut axis = String::new();
+    // Track character count (not byte count) since '─' is multi-byte
     let segment_width = if tick_count > 0 { bar_width / tick_count } else { bar_width };
 
+    let mut axis_chars: Vec<char> = Vec::with_capacity(bar_width);
+
     // First label: "now"
-    axis.push_str("now");
-    let mut pos = 3; // length of "now"
+    for c in "now".chars() {
+        axis_chars.push(c);
+    }
 
     for i in 1..=tick_count {
         let target = segment_width * i;
         let label = tick_label_fn(i);
-        let fill = target.saturating_sub(pos).saturating_sub(label.len());
+        let label_char_count = label.chars().count();
+        let fill = target.saturating_sub(axis_chars.len()).saturating_sub(label_char_count);
         for _ in 0..fill {
-            axis.push('─');
+            axis_chars.push('─');
         }
-        axis.push_str(&label);
-        pos = target;
+        for c in label.chars() {
+            axis_chars.push(c);
+        }
     }
 
-    // Pad or truncate to bar_width
-    if axis.len() < bar_width {
-        let remaining = bar_width - axis.len();
-        for _ in 0..remaining {
-            axis.push(' ');
-        }
-    } else if axis.len() > bar_width {
-        axis.truncate(bar_width);
+    // Pad or truncate to bar_width (by character count)
+    while axis_chars.len() < bar_width {
+        axis_chars.push(' ');
     }
+    axis_chars.truncate(bar_width);
 
+    let axis: String = axis_chars.into_iter().collect();
     spans.push(Span::styled(axis, Style::default().fg(Color::DarkGray)));
     Line::from(spans)
 }
