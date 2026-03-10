@@ -8,10 +8,13 @@ use ratatui::{
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let chart_height = if app.selected_interface.is_some() { 5 } else { 10 };
+    let alert_count = app.network_intel.active_alert_count();
+    let alert_height = if alert_count > 0 { (alert_count as u16).min(3) + 2 } else { 0 };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),            // header
+            Constraint::Length(alert_height), // alerts (0 if none)
             Constraint::Min(6),              // interface table
             Constraint::Length(chart_height), // bandwidth graph or per-iface sparkline
             Constraint::Length(7),            // top connections
@@ -22,20 +25,53 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .split(area);
 
     render_header(f, app, chunks[0]);
-    render_interface_table(f, app, chunks[1]);
-    if app.selected_interface.is_some() {
-        render_sparkline(f, app, chunks[2]);
-    } else {
-        render_bandwidth_graph(f, app, chunks[2]);
+    if alert_count > 0 {
+        render_alerts(f, app, chunks[1]);
     }
-    render_top_connections(f, app, chunks[3]);
-    render_health(f, app, chunks[4]);
-    render_latency_heatmap(f, app, chunks[5]);
-    render_footer(f, app, chunks[6]);
+    render_interface_table(f, app, chunks[2]);
+    if app.selected_interface.is_some() {
+        render_sparkline(f, app, chunks[3]);
+    } else {
+        render_bandwidth_graph(f, app, chunks[3]);
+    }
+    render_top_connections(f, app, chunks[4]);
+    render_health(f, app, chunks[5]);
+    render_latency_heatmap(f, app, chunks[6]);
+    render_footer(f, app, chunks[7]);
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
     widgets::render_header(f, app, area);
+}
+
+fn render_alerts(f: &mut Frame, app: &App, area: Rect) {
+    use crate::collectors::network_intel::AlertSeverity;
+
+    let alerts = app.network_intel.active_alerts();
+    let lines: Vec<Line> = alerts.iter().take(3).map(|alert| {
+        let (icon, style) = match alert.severity {
+            AlertSeverity::Critical => ("● ", Style::default().fg(Color::Red).bold()),
+            AlertSeverity::Warning => ("▲ ", Style::default().fg(Color::Yellow)),
+        };
+        Line::from(vec![
+            Span::styled(icon, style),
+            Span::styled(alert.category.label(), style),
+            Span::raw(": "),
+            Span::styled(alert.message.clone(), Style::default().fg(Color::White)),
+            Span::raw("  "),
+            Span::styled(alert.detail.clone(), Style::default().fg(Color::DarkGray)),
+        ])
+    }).collect();
+
+    let alert_widget = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(format!(" ⚠ Alerts ({}) ", alerts.len()))
+                .title_style(Style::default().fg(Color::Yellow).bold())
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
+    f.render_widget(alert_widget, area);
 }
 
 fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {

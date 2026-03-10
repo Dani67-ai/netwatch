@@ -2,6 +2,7 @@ use crate::collectors::config::ConfigCollector;
 use crate::collectors::connections::{Connection, ConnectionCollector, ConnectionTimeline};
 use crate::collectors::geo::GeoCache;
 use crate::collectors::insights::{InsightsCollector, NetworkSnapshot};
+use crate::collectors::network_intel::{NetworkIntelCollector, ConnAttemptEvent, InterfaceRateEvent};
 use crate::collectors::traceroute::TracerouteRunner;
 use crate::collectors::whois::WhoisCache;
 use crate::collectors::health::HealthProber;
@@ -122,6 +123,8 @@ pub struct App {
     pub insights_collector: InsightsCollector,
     pub insights_scroll: usize,
     insights_tick: u32,
+    pub network_intel: NetworkIntelCollector,
+    intel_last_pkt_id: u64,
     pub ebpf_status: EbpfStatus,
     #[allow(dead_code)]
     pub rtt_monitor: crate::ebpf::rtt_monitor::RttMonitor,
@@ -188,6 +191,8 @@ impl App {
             insights_collector: InsightsCollector::new("minimax-m2.5:cloud"),
             insights_scroll: 0,
             insights_tick: 0,
+            network_intel: NetworkIntelCollector::new(),
+            intel_last_pkt_id: 0,
             ebpf_status: Self::init_ebpf_status(),
             rtt_monitor: crate::ebpf::rtt_monitor::RttMonitor::new(),
             #[cfg(all(target_os = "linux", feature = "ebpf"))]
@@ -294,6 +299,21 @@ impl App {
             }
         }
 
+        // Feed network intelligence from new packets
+        self.feed_network_intel();
+
+        // Feed interface rates to bandwidth alerts
+        for iface in &self.traffic.interfaces {
+            self.network_intel.on_interface_rate(InterfaceRateEvent {
+                iface: iface.name.clone(),
+                rx_bps: iface.rx_rate as u64,
+                tx_bps: iface.tx_rate as u64,
+            });
+        }
+
+        // Tick network intel (housekeeping)
+        self.network_intel.tick();
+
         // Refresh health every ~5 ticks (5s)
         self.health_tick += 1;
         if self.health_tick >= 5 {
@@ -327,6 +347,57 @@ impl App {
         );
         let snapshot = NetworkSnapshot::build(&packets, &conns, &health, &rx_rate, &tx_rate);
         self.insights_collector.submit_snapshot(snapshot);
+    }
+
+    fn feed_network_intel(&mut self) {
+        use crate::collectors::network_intel::{DnsQueryEvent, DnsResponseEvent};
+
+        let packets = self.packet_collector.get_packets();
+        for pkt in packets.iter() {
+            if pkt.id <= self.intel_last_pkt_id {
+                continue;
+            }
+            self.intel_last_pkt_id = pkt.id;
+
+            // Feed connection attempts (TCP SYN)
+            if let Some(flags) = pkt.tcp_flags {
+                if flags & 0x02 != 0 && flags & 0x10 == 0 {
+                    // SYN without ACK = connection attempt
+                    if let (Some(dst_port), true) = (pkt.dst_port, !pkt.dst_ip.is_empty()) {
+                        self.network_intel.on_conn_attempt(ConnAttemptEvent {
+                            src_ip: pkt.src_ip.clone(),
+                            dst_ip: pkt.dst_ip.clone(),
+                            dst_port,
+                        });
+                    }
+                }
+            }
+
+            // Feed DNS events
+            if pkt.protocol == "DNS" || pkt.protocol == "mDNS" {
+                if pkt.info.contains("Query") {
+                    // Extract qname from info: "DNS Query A example.com"
+                    let qname = pkt.info.split_whitespace().skip(2).last()
+                        .unwrap_or("").to_string();
+                    if !qname.is_empty() {
+                        self.network_intel.on_dns_query(DnsQueryEvent {
+                            txid: (pkt.id & 0xFFFF) as u16,
+                            client_ip: pkt.src_ip.clone(),
+                            server_ip: pkt.dst_ip.clone(),
+                            qname,
+                        });
+                    }
+                } else if pkt.info.contains("Response") {
+                    let rcode = if pkt.info.contains("NXDOMAIN") { 3 } else { 0 };
+                    self.network_intel.on_dns_response(DnsResponseEvent {
+                        txid: (pkt.id & 0xFFFF) as u16,
+                        client_ip: pkt.dst_ip.clone(),
+                        server_ip: pkt.src_ip.clone(),
+                        rcode,
+                    });
+                }
+            }
+        }
     }
 }
 

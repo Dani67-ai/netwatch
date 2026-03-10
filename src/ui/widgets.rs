@@ -73,6 +73,14 @@ fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'sta
         ));
     }
 
+    let alert_count = app.network_intel.active_alert_count();
+    if alert_count > 0 {
+        spans.push(Span::styled(
+            format!(" ⚠ {} ", alert_count),
+            Style::default().fg(Color::Black).bg(Color::Red),
+        ));
+    }
+
     if let Some(extra_spans) = extra {
         for s in extra_spans {
             spans.push(s);

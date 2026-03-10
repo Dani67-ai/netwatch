@@ -7,3 +7,4 @@ pub mod geo;
 pub mod whois;
 pub mod insights;
 pub mod traceroute;
+pub mod network_intel;
