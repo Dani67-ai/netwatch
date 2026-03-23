@@ -54,17 +54,15 @@ impl TracerouteRunner {
 
         let result = Arc::clone(&self.result);
         let target = target.to_string();
-        thread::spawn(move || {
-            match run_traceroute(&target) {
-                Ok(hops) => {
-                    let mut r = result.lock().unwrap();
-                    r.hops = hops;
-                    r.status = TracerouteStatus::Done;
-                }
-                Err(e) => {
-                    let mut r = result.lock().unwrap();
-                    r.status = TracerouteStatus::Error(e);
-                }
+        thread::spawn(move || match run_traceroute(&target) {
+            Ok(hops) => {
+                let mut r = result.lock().unwrap();
+                r.hops = hops;
+                r.status = TracerouteStatus::Done;
+            }
+            Err(e) => {
+                let mut r = result.lock().unwrap();
+                r.status = TracerouteStatus::Error(e);
             }
         });
     }

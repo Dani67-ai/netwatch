@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use crate::app::App;
-use crate::ui::widgets;
 use crate::collectors::connections::TrackedConnection;
+use crate::ui::widgets;
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Paragraph},
@@ -12,7 +12,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // header
+            Constraint::Length(3), // header
             Constraint::Min(6),    // timeline chart
             Constraint::Length(3), // legend
             Constraint::Length(3), // summary
@@ -31,7 +31,10 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
     let window_label = app.timeline_window.label();
     let extra = vec![
         Span::raw("  "),
-        Span::styled(format!("last {}", window_label), Style::default().fg(app.theme.status_good)),
+        Span::styled(
+            format!("last {}", window_label),
+            Style::default().fg(app.theme.status_good),
+        ),
     ];
     widgets::render_header_with_extra(f, app, area, extra);
 }
@@ -42,11 +45,15 @@ fn render_chart(f: &mut Frame, app: &App, area: Rect) {
     let window_start = now - std::time::Duration::from_secs(window_secs);
 
     // Sort: active first, then by first_seen (oldest at top)
-    let mut sorted: Vec<&TrackedConnection> = app.connection_timeline.tracked.iter()
+    let mut sorted: Vec<&TrackedConnection> = app
+        .connection_timeline
+        .tracked
+        .iter()
         .filter(|t| t.last_seen >= window_start)
         .collect();
     sorted.sort_by(|a, b| {
-        b.is_active.cmp(&a.is_active)
+        b.is_active
+            .cmp(&a.is_active)
             .then_with(|| a.first_seen.cmp(&b.first_seen))
     });
 
@@ -74,36 +81,56 @@ fn render_chart(f: &mut Frame, app: &App, area: Rect) {
     }
 
     // Build time axis
-    let time_axis = build_time_axis(app.timeline_window.seconds(), label_width as usize, bar_width, &app.theme);
+    let time_axis = build_time_axis(
+        app.timeline_window.seconds(),
+        label_width as usize,
+        bar_width,
+        &app.theme,
+    );
 
     let visible_rows = inner.height.saturating_sub(1) as usize;
-    let scroll = app.timeline_scroll.min(sorted.len().saturating_sub(visible_rows.max(1)));
-    let visible: Vec<&TrackedConnection> = sorted.iter().skip(scroll).take(visible_rows).copied().collect();
+    let scroll = app
+        .timeline_scroll
+        .min(sorted.len().saturating_sub(visible_rows.max(1)));
+    let visible: Vec<&TrackedConnection> = sorted
+        .iter()
+        .skip(scroll)
+        .take(visible_rows)
+        .copied()
+        .collect();
 
-    let lines: Vec<Line> = visible.iter().enumerate().map(|(i, tracked)| {
-        let is_selected = i + scroll == app.timeline_scroll;
+    let lines: Vec<Line> = visible
+        .iter()
+        .enumerate()
+        .map(|(i, tracked)| {
+            let is_selected = i + scroll == app.timeline_scroll;
 
-        // Build label: "process    remote_ip"
-        let proc_name = tracked.process_name.as_deref().unwrap_or("—");
-        let remote = extract_ip(&tracked.key.remote_addr);
-        let label = format!(" {:<10} {:<12}", truncate(proc_name, 10), truncate(&remote, 12));
+            // Build label: "process    remote_ip"
+            let proc_name = tracked.process_name.as_deref().unwrap_or("—");
+            let remote = extract_ip(&tracked.key.remote_addr);
+            let label = format!(
+                " {:<10} {:<12}",
+                truncate(proc_name, 10),
+                truncate(&remote, 12)
+            );
 
-        let label_style = if is_selected {
-            Style::default().fg(app.theme.active_tab).bold()
-        } else if tracked.is_active {
-            Style::default().fg(app.theme.text_primary)
-        } else {
-            Style::default().fg(app.theme.text_muted)
-        };
+            let label_style = if is_selected {
+                Style::default().fg(app.theme.active_tab).bold()
+            } else if tracked.is_active {
+                Style::default().fg(app.theme.text_primary)
+            } else {
+                Style::default().fg(app.theme.text_muted)
+            };
 
-        // Build the bar
-        let bar = render_bar(tracked, now, window_start, bar_width, &app.theme);
+            // Build the bar
+            let bar = render_bar(tracked, now, window_start, bar_width, &app.theme);
 
-        let mut spans = vec![Span::styled(label, label_style), Span::raw(" ")];
-        spans.extend(bar);
+            let mut spans = vec![Span::styled(label, label_style), Span::raw(" ")];
+            spans.extend(bar);
 
-        Line::from(spans)
-    }).collect();
+            Line::from(spans)
+        })
+        .collect();
 
     let mut all_lines = vec![time_axis];
     all_lines.extend(lines);
@@ -215,8 +242,18 @@ fn render_legend(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_summary(f: &mut Frame, app: &App, area: Rect) {
-    let active = app.connection_timeline.tracked.iter().filter(|t| t.is_active).count();
-    let closed = app.connection_timeline.tracked.iter().filter(|t| !t.is_active).count();
+    let active = app
+        .connection_timeline
+        .tracked
+        .iter()
+        .filter(|t| t.is_active)
+        .count();
+    let closed = app
+        .connection_timeline
+        .tracked
+        .iter()
+        .filter(|t| !t.is_active)
+        .count();
     let total = app.connection_timeline.tracked.len();
 
     let t = &app.theme;
@@ -250,7 +287,12 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     widgets::render_footer(f, app, area, hints);
 }
 
-fn build_time_axis(window_secs: u64, label_width: usize, bar_width: usize, theme: &crate::theme::Theme) -> Line<'static> {
+fn build_time_axis(
+    window_secs: u64,
+    label_width: usize,
+    bar_width: usize,
+    theme: &crate::theme::Theme,
+) -> Line<'static> {
     // Choose tick interval based on window size
     let (tick_count, tick_label_fn): (usize, Box<dyn Fn(usize) -> String>) = match window_secs {
         0..=60 => (6, Box::new(|i| format!("{}s", i * 10))),
@@ -264,16 +306,18 @@ fn build_time_axis(window_secs: u64, label_width: usize, bar_width: usize, theme
 
     // Build the axis string
     // Left side: label padding + "now"
-    let mut spans: Vec<Span<'static>> = vec![
-        Span::styled(
-            format!("{:>width$} ", "", width = label_width),
-            Style::default().fg(muted),
-        ),
-    ];
+    let mut spans: Vec<Span<'static>> = vec![Span::styled(
+        format!("{:>width$} ", "", width = label_width),
+        Style::default().fg(muted),
+    )];
 
     // The axis goes left=now, right=oldest
     // Track character count (not byte count) since '─' is multi-byte
-    let segment_width = if tick_count > 0 { bar_width / tick_count } else { bar_width };
+    let segment_width = if tick_count > 0 {
+        bar_width / tick_count
+    } else {
+        bar_width
+    };
 
     let mut axis_chars: Vec<char> = Vec::with_capacity(bar_width);
 
@@ -286,7 +330,9 @@ fn build_time_axis(window_secs: u64, label_width: usize, bar_width: usize, theme
         let target = segment_width * i;
         let label = tick_label_fn(i);
         let label_char_count = label.chars().count();
-        let fill = target.saturating_sub(axis_chars.len()).saturating_sub(label_char_count);
+        let fill = target
+            .saturating_sub(axis_chars.len())
+            .saturating_sub(label_char_count);
         for _ in 0..fill {
             axis_chars.push('─');
         }
@@ -314,7 +360,11 @@ fn extract_ip(addr: &str) -> String {
         addr[1..bracket_end].to_string()
     } else if let Some(colon) = addr.rfind(':') {
         let ip = &addr[..colon];
-        if ip == "*" { "—".to_string() } else { ip.to_string() }
+        if ip == "*" {
+            "—".to_string()
+        } else {
+            ip.to_string()
+        }
     } else {
         addr.to_string()
     }

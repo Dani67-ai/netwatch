@@ -1,11 +1,11 @@
 use anyhow::Result;
-use netwatch::app;
-use netwatch::config::NetwatchConfig;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use netwatch::app;
+use netwatch::config::NetwatchConfig;
 use ratatui::prelude::*;
 use std::io;
 

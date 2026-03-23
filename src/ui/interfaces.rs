@@ -10,7 +10,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // header
-            Constraint::Min(8),   // interface detail table
+            Constraint::Min(8),    // interface detail table
             Constraint::Length(5), // sparkline
             Constraint::Length(3), // footer
         ])
@@ -133,7 +133,9 @@ fn render_detail_table(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_sparkline(f: &mut Frame, app: &App, area: Rect) {
-    let selected = app.selected_interface.and_then(|i| app.traffic.interfaces.get(i));
+    let selected = app
+        .selected_interface
+        .and_then(|i| app.traffic.interfaces.get(i));
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)

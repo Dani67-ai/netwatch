@@ -47,12 +47,18 @@ impl WhoisCache {
                 let result = lookup_whois(&ip);
                 let mut c = resolver_cache.lock().unwrap();
                 match result {
-                    Some(info) => { c.insert(ip, WhoisEntry::Resolved(info)); }
-                    None => { c.insert(ip, WhoisEntry::Failed); }
+                    Some(info) => {
+                        c.insert(ip, WhoisEntry::Resolved(info));
+                    }
+                    None => {
+                        c.insert(ip, WhoisEntry::Failed);
+                    }
                 }
                 if c.len() > WHOIS_CACHE_MAX {
                     let keys: Vec<String> = c.keys().take(WHOIS_CACHE_MAX / 4).cloned().collect();
-                    for k in keys { c.remove(&k); }
+                    for k in keys {
+                        c.remove(&k);
+                    }
                 }
             }
         });
@@ -91,20 +97,34 @@ impl WhoisCache {
 
 fn is_private_ip(ip: &str) -> bool {
     ip.starts_with("10.")
-        || ip.starts_with("172.16.") || ip.starts_with("172.17.") || ip.starts_with("172.18.")
-        || ip.starts_with("172.19.") || ip.starts_with("172.20.") || ip.starts_with("172.21.")
-        || ip.starts_with("172.22.") || ip.starts_with("172.23.") || ip.starts_with("172.24.")
-        || ip.starts_with("172.25.") || ip.starts_with("172.26.") || ip.starts_with("172.27.")
-        || ip.starts_with("172.28.") || ip.starts_with("172.29.") || ip.starts_with("172.30.")
+        || ip.starts_with("172.16.")
+        || ip.starts_with("172.17.")
+        || ip.starts_with("172.18.")
+        || ip.starts_with("172.19.")
+        || ip.starts_with("172.20.")
+        || ip.starts_with("172.21.")
+        || ip.starts_with("172.22.")
+        || ip.starts_with("172.23.")
+        || ip.starts_with("172.24.")
+        || ip.starts_with("172.25.")
+        || ip.starts_with("172.26.")
+        || ip.starts_with("172.27.")
+        || ip.starts_with("172.28.")
+        || ip.starts_with("172.29.")
+        || ip.starts_with("172.30.")
         || ip.starts_with("172.31.")
         || ip.starts_with("192.168.")
         || ip.starts_with("127.")
         || ip == "0.0.0.0"
-        || ip == "::" || ip == "::1"
-        || ip.starts_with("fe80:") || ip.starts_with("fc") || ip.starts_with("fd")
+        || ip == "::"
+        || ip == "::1"
+        || ip.starts_with("fe80:")
+        || ip.starts_with("fc")
+        || ip.starts_with("fd")
         || ip.starts_with("ff")
         || ip.starts_with("169.254.")
-        || ip.starts_with("224.") || ip.starts_with("239.")
+        || ip.starts_with("224.")
+        || ip.starts_with("239.")
 }
 
 fn lookup_whois(ip: &str) -> Option<WhoisInfo> {
@@ -114,12 +134,14 @@ fn lookup_whois(ip: &str) -> Option<WhoisInfo> {
     let body = resp.into_string().ok()?;
     let v: serde_json::Value = serde_json::from_str(&body).ok()?;
 
-    let name = v.get("name")
+    let name = v
+        .get("name")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
 
-    let handle = v.get("handle")
+    let handle = v
+        .get("handle")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
@@ -134,7 +156,8 @@ fn lookup_whois(ip: &str) -> Option<WhoisInfo> {
     };
 
     // Country from country field
-    let country = v.get("country")
+    let country = v
+        .get("country")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
@@ -143,7 +166,8 @@ fn lookup_whois(ip: &str) -> Option<WhoisInfo> {
     let org = extract_entity_name(&v).unwrap_or_default();
 
     // Description from remarks
-    let description = v.get("remarks")
+    let description = v
+        .get("remarks")
         .and_then(|r| r.as_array())
         .and_then(|arr| arr.first())
         .and_then(|r| r.get("description"))
@@ -153,11 +177,7 @@ fn lookup_whois(ip: &str) -> Option<WhoisInfo> {
         .unwrap_or("")
         .to_string();
 
-    let net_name = if !name.is_empty() {
-        name
-    } else {
-        handle
-    };
+    let net_name = if !name.is_empty() { name } else { handle };
 
     Some(WhoisInfo {
         net_name,
@@ -174,7 +194,8 @@ fn extract_entity_name(v: &serde_json::Value) -> Option<String> {
         let roles = entity.get("roles").and_then(|r| r.as_array());
         let is_registrant = roles.map_or(false, |r| {
             r.iter().any(|role| {
-                role.as_str().map_or(false, |s| s == "registrant" || s == "administrative")
+                role.as_str()
+                    .map_or(false, |s| s == "registrant" || s == "administrative")
             })
         });
         if is_registrant {
@@ -189,11 +210,13 @@ fn extract_entity_name(v: &serde_json::Value) -> Option<String> {
         }
     }
     // Fallback: first entity handle
-    entities.first()
-        .and_then(|e| {
-            extract_vcard_name(e)
-                .or_else(|| e.get("handle").and_then(|h| h.as_str()).map(|s| s.to_string()))
+    entities.first().and_then(|e| {
+        extract_vcard_name(e).or_else(|| {
+            e.get("handle")
+                .and_then(|h| h.as_str())
+                .map(|s| s.to_string())
         })
+    })
 }
 
 fn extract_vcard_name(entity: &serde_json::Value) -> Option<String> {

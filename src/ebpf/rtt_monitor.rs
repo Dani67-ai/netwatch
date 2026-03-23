@@ -129,7 +129,11 @@ impl RttMonitor {
 
     /// Get the current smoothed RTT for a connection, if tracked.
     pub fn get_rtt(&self, key: &RttConnectionKey) -> Option<f64> {
-        self.connections.lock().unwrap().get(key).and_then(|w| w.latest())
+        self.connections
+            .lock()
+            .unwrap()
+            .get(key)
+            .and_then(|w| w.latest())
     }
 
     /// Check if a connection's RTT is currently anomalous.
@@ -149,9 +153,7 @@ impl RttMonitor {
         if conns.len() > max_connections {
             // Remove connections with fewest samples (least active)
             let mut entries: Vec<_> = conns.keys().cloned().collect();
-            entries.sort_by_key(|k| {
-                conns.get(k).map(|w| w.window.len()).unwrap_or(0)
-            });
+            entries.sort_by_key(|k| conns.get(k).map(|w| w.window.len()).unwrap_or(0));
             let to_remove = conns.len() - max_connections;
             for key in entries.into_iter().take(to_remove) {
                 conns.remove(&key);

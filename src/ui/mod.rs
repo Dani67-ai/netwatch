@@ -1,12 +1,12 @@
-pub mod dashboard;
 pub mod connections;
-pub mod processes;
+pub mod dashboard;
+pub mod help;
+pub mod insights;
 pub mod interfaces;
 pub mod packets;
+pub mod processes;
+pub mod settings;
 pub mod stats;
 pub mod timeline;
 pub mod topology;
-pub mod insights;
 pub mod widgets;
-pub mod help;
-pub mod settings;

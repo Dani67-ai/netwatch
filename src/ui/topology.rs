@@ -13,7 +13,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // header
+            Constraint::Length(3), // header
             Constraint::Min(10),   // topology map
             Constraint::Length(3), // summary
             Constraint::Length(3), // footer
@@ -133,11 +133,15 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
 
     // Build centre node content
     let hostname = &app.config_collector.config.hostname;
-    let primary_ip = app.interface_info.iter()
+    let primary_ip = app
+        .interface_info
+        .iter()
         .find(|i| i.is_up && i.ipv4.is_some() && i.name != "lo0" && i.name != "lo")
         .and_then(|i| i.ipv4.clone())
         .unwrap_or_else(|| "—".to_string());
-    let iface_names: Vec<&str> = app.interface_info.iter()
+    let iface_names: Vec<&str> = app
+        .interface_info
+        .iter()
         .filter(|i| i.is_up && i.name != "lo0" && i.name != "lo")
         .map(|i| i.name.as_str())
         .collect();
@@ -147,12 +151,26 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         format!("{} +{}", iface_names[0], iface_names.len() - 1)
     };
 
-    let total_rx: f64 = app.traffic.interfaces.iter()
-        .filter(|i| app.interface_info.iter().any(|info| info.name == i.name && info.is_up && info.name != "lo0" && info.name != "lo"))
+    let total_rx: f64 = app
+        .traffic
+        .interfaces
+        .iter()
+        .filter(|i| {
+            app.interface_info.iter().any(|info| {
+                info.name == i.name && info.is_up && info.name != "lo0" && info.name != "lo"
+            })
+        })
         .map(|i| i.rx_rate)
         .sum();
-    let total_tx: f64 = app.traffic.interfaces.iter()
-        .filter(|i| app.interface_info.iter().any(|info| info.name == i.name && info.is_up && info.name != "lo0" && info.name != "lo"))
+    let total_tx: f64 = app
+        .traffic
+        .interfaces
+        .iter()
+        .filter(|i| {
+            app.interface_info.iter().any(|info| {
+                info.name == i.name && info.is_up && info.name != "lo0" && info.name != "lo"
+            })
+        })
         .map(|i| i.tx_rate)
         .sum();
 
@@ -167,7 +185,8 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
 
     if let Some(ref gw) = app.config_collector.config.gateway {
         let (dot, style) = health_indicator(hs.gateway_rtt_ms, hs.gateway_loss_pct, t);
-        let rtt_str = hs.gateway_rtt_ms
+        let rtt_str = hs
+            .gateway_rtt_ms
             .map(|r| format!("{:.1}ms", r))
             .unwrap_or_else(|| "—".to_string());
         left_nodes.push((
@@ -206,18 +225,29 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     let left_total_height = if left_nodes.is_empty() {
         0
     } else {
-        (left_nodes.len() as u16) * left_node_height
-            + (left_nodes.len() as u16 - 1) * left_spacing
+        (left_nodes.len() as u16) * left_node_height + (left_nodes.len() as u16 - 1) * left_spacing
     };
     let center_height = center_height.max(left_total_height);
     let center_rect = Rect::new(center_x, center_y, center_width, center_height);
     // Re-render center node with adjusted height
     let center_node = Paragraph::new(vec![
-        Line::from(Span::styled(format!(" {} ", hostname), Style::default().fg(t.brand).bold())),
+        Line::from(Span::styled(
+            format!(" {} ", hostname),
+            Style::default().fg(t.brand).bold(),
+        )),
         Line::from(Span::raw(format!(" {} ", primary_ip))),
-        Line::from(Span::styled(format!(" {} ", iface_str), Style::default().fg(t.text_muted))),
-        Line::from(Span::styled(format!(" ↓{} ", widgets::format_bytes_rate(total_rx)), Style::default().fg(t.rx_rate))),
-        Line::from(Span::styled(format!(" ↑{} ", widgets::format_bytes_rate(total_tx)), Style::default().fg(t.tx_rate))),
+        Line::from(Span::styled(
+            format!(" {} ", iface_str),
+            Style::default().fg(t.text_muted),
+        )),
+        Line::from(Span::styled(
+            format!(" ↓{} ", widgets::format_bytes_rate(total_rx)),
+            Style::default().fg(t.rx_rate),
+        )),
+        Line::from(Span::styled(
+            format!(" ↑{} ", widgets::format_bytes_rate(total_tx)),
+            Style::default().fg(t.tx_rate),
+        )),
     ])
     .block(
         Block::default()
@@ -235,7 +265,8 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
             break;
         }
 
-        let lines: Vec<Line> = content.split('\n')
+        let lines: Vec<Line> = content
+            .split('\n')
             .map(|s| Line::from(Span::styled(format!(" {} ", s), *style)))
             .collect();
 
@@ -252,9 +283,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         // Draw edge line from left node to centre
         let edge_y = left_y + left_node_height / 2;
         if edge_y >= inner.y && edge_y < inner.y + inner.height {
-            let edge = Paragraph::new(Line::from(
-                Span::styled("────", *style),
-            ));
+            let edge = Paragraph::new(Line::from(Span::styled("────", *style)));
             let edge_rect = Rect::new(edge_left_x, edge_y, edge_left_width, 1);
             f.render_widget(edge, edge_rect);
         }
@@ -265,7 +294,8 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     // Render right-side nodes (remote hosts)
     let right_node_height = 4u16;
     let right_spacing = 1u16;
-    let max_right_nodes = ((inner.height.saturating_sub(2)) / (right_node_height + right_spacing)).max(1) as usize;
+    let max_right_nodes =
+        ((inner.height.saturating_sub(2)) / (right_node_height + right_spacing)).max(1) as usize;
 
     // Stretch center node further if the right column is taller
     let visible_count = remotes.len().min(max_right_nodes) as u16;
@@ -277,11 +307,23 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
     if right_total_height > center_height {
         let center_rect = Rect::new(center_x, center_y, center_width, right_total_height);
         let center_node = Paragraph::new(vec![
-            Line::from(Span::styled(format!(" {} ", hostname), Style::default().fg(t.brand).bold())),
+            Line::from(Span::styled(
+                format!(" {} ", hostname),
+                Style::default().fg(t.brand).bold(),
+            )),
             Line::from(Span::raw(format!(" {} ", primary_ip))),
-            Line::from(Span::styled(format!(" {} ", iface_str), Style::default().fg(t.text_muted))),
-            Line::from(Span::styled(format!(" ↓{} ", widgets::format_bytes_rate(total_rx)), Style::default().fg(t.rx_rate))),
-            Line::from(Span::styled(format!(" ↑{} ", widgets::format_bytes_rate(total_tx)), Style::default().fg(t.tx_rate))),
+            Line::from(Span::styled(
+                format!(" {} ", iface_str),
+                Style::default().fg(t.text_muted),
+            )),
+            Line::from(Span::styled(
+                format!(" ↓{} ", widgets::format_bytes_rate(total_rx)),
+                Style::default().fg(t.rx_rate),
+            )),
+            Line::from(Span::styled(
+                format!(" ↑{} ", widgets::format_bytes_rate(total_tx)),
+                Style::default().fg(t.tx_rate),
+            )),
         ])
         .block(
             Block::default()
@@ -291,8 +333,11 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         );
         f.render_widget(center_node, center_rect);
     }
-    let scroll = app.topology_scroll.min(remotes.len().saturating_sub(max_right_nodes.max(1)));
-    let visible_remotes: Vec<&RemoteNode> = remotes.iter().skip(scroll).take(max_right_nodes).collect();
+    let scroll = app
+        .topology_scroll
+        .min(remotes.len().saturating_sub(max_right_nodes.max(1)));
+    let visible_remotes: Vec<&RemoteNode> =
+        remotes.iter().skip(scroll).take(max_right_nodes).collect();
     let mut right_y = center_y;
 
     for (i, remote) in visible_remotes.iter().enumerate() {
@@ -320,7 +365,11 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         let mut lines = vec![
             Line::from(Span::styled(
                 format!("{} {} ", ip_prefix, remote.ip),
-                if is_selected { Style::default().fg(t.active_tab).bold() } else { Style::default() },
+                if is_selected {
+                    Style::default().fg(t.active_tab).bold()
+                } else {
+                    Style::default()
+                },
             )),
             Line::from(Span::styled(
                 format!(" {}× {} ", remote.conn_count, proc_str),
@@ -328,14 +377,21 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
             )),
         ];
         if let Some(ref geo) = remote.geo_label {
-            let truncated: String = geo.chars().take((right_width.saturating_sub(3)) as usize).collect();
+            let truncated: String = geo
+                .chars()
+                .take((right_width.saturating_sub(3)) as usize)
+                .collect();
             lines.push(Line::from(Span::styled(
                 format!(" {} ", truncated),
                 Style::default().fg(t.text_muted),
             )));
         }
 
-        let node_h = if remote.geo_label.is_some() { 5u16 } else { right_node_height };
+        let node_h = if remote.geo_label.is_some() {
+            5u16
+        } else {
+            right_node_height
+        };
         let node = Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::ALL)
@@ -355,9 +411,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(t.text_muted)
             };
             let edge_label = format!("─▶{}×", remote.conn_count);
-            let edge = Paragraph::new(Line::from(
-                Span::styled(edge_label, edge_style),
-            ));
+            let edge = Paragraph::new(Line::from(Span::styled(edge_label, edge_style)));
             let edge_rect = Rect::new(edge_right_x, edge_y, edge_right_width, 1);
             f.render_widget(edge, edge_rect);
         }
@@ -426,12 +480,8 @@ fn health_indicator(rtt: Option<f64>, loss: f64, theme: &Theme) -> (String, Styl
         Some(r) if loss < 50.0 && r < 100.0 => {
             ("●".to_string(), Style::default().fg(theme.status_warn))
         }
-        Some(_) => {
-            ("●".to_string(), Style::default().fg(theme.status_error))
-        }
-        None => {
-            ("○".to_string(), Style::default().fg(theme.text_muted))
-        }
+        Some(_) => ("●".to_string(), Style::default().fg(theme.status_error)),
+        None => ("○".to_string(), Style::default().fg(theme.text_muted)),
     }
 }
 
@@ -440,8 +490,12 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
     let result = app.traceroute_runner.result.lock().unwrap();
 
     // Centre overlay occupying ~70% of the screen
-    let overlay_width = (area.width * 70 / 100).max(50).min(area.width.saturating_sub(4));
-    let overlay_height = (area.height * 70 / 100).max(10).min(area.height.saturating_sub(4));
+    let overlay_width = (area.width * 70 / 100)
+        .max(50)
+        .min(area.width.saturating_sub(4));
+    let overlay_height = (area.height * 70 / 100)
+        .max(10)
+        .min(area.height.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(overlay_width)) / 2;
     let y = area.y + (area.height.saturating_sub(overlay_height)) / 2;
     let overlay = Rect::new(x, y, overlay_width, overlay_height);
@@ -521,13 +575,20 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = inner.height as usize;
     let max_scroll = lines.len().saturating_sub(visible_height);
     let scroll = app.traceroute_scroll.min(max_scroll);
-    let visible_lines: Vec<Line> = lines.into_iter().skip(scroll).take(visible_height).collect();
+    let visible_lines: Vec<Line> = lines
+        .into_iter()
+        .skip(scroll)
+        .take(visible_height)
+        .collect();
 
     let content = Paragraph::new(visible_lines);
     f.render_widget(content, inner);
 }
 
-fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop, theme: &Theme) -> Line<'static> {
+fn format_hop_line(
+    hop: &crate::collectors::traceroute::TracerouteHop,
+    theme: &Theme,
+) -> Line<'static> {
     let hop_num = format!(" {:>2} ", hop.hop_number);
     let host_ip = match (&hop.host, &hop.ip) {
         (Some(h), Some(ip)) => format!("{} ({})", h, ip),
@@ -547,22 +608,35 @@ fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop, theme: &T
             .collect()
     };
 
-    let rtt_color = hop.rtt_ms.iter().filter_map(|r| r.as_ref()).next().map(|ms| {
-        if *ms < 10.0 {
-            theme.status_good
-        } else if *ms < 50.0 {
-            theme.status_warn
-        } else if *ms < 100.0 {
-            Color::Rgb(255, 165, 0) // orange
-        } else {
-            theme.status_error
-        }
-    }).unwrap_or(theme.text_muted);
+    let rtt_color = hop
+        .rtt_ms
+        .iter()
+        .filter_map(|r| r.as_ref())
+        .next()
+        .map(|ms| {
+            if *ms < 10.0 {
+                theme.status_good
+            } else if *ms < 50.0 {
+                theme.status_warn
+            } else if *ms < 100.0 {
+                Color::Rgb(255, 165, 0) // orange
+            } else {
+                theme.status_error
+            }
+        })
+        .unwrap_or(theme.text_muted);
 
     Line::from(vec![
         Span::styled(hop_num, Style::default().fg(theme.brand)),
         Span::raw("  "),
-        Span::styled(format!("{:<40}", host_ip), Style::default().fg(if hop.ip.is_some() { theme.text_primary } else { theme.text_muted })),
+        Span::styled(
+            format!("{:<40}", host_ip),
+            Style::default().fg(if hop.ip.is_some() {
+                theme.text_primary
+            } else {
+                theme.text_muted
+            }),
+        ),
         Span::styled(rtt_spans[0].clone(), Style::default().fg(rtt_color)),
         Span::raw(" "),
         Span::styled(rtt_spans[1].clone(), Style::default().fg(rtt_color)),
@@ -579,7 +653,11 @@ fn extract_ip(addr: &str) -> String {
         addr[1..bracket_end].to_string()
     } else if let Some(colon) = addr.rfind(':') {
         let ip = &addr[..colon];
-        if ip == "*" { String::new() } else { ip.to_string() }
+        if ip == "*" {
+            String::new()
+        } else {
+            ip.to_string()
+        }
     } else {
         addr.to_string()
     }

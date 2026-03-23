@@ -69,14 +69,21 @@ impl NetworkSnapshot {
             // Collect resolved hostnames for IP context
             if dns_resolutions.len() < 50 {
                 if let Some(ref host) = pkt.dst_host {
-                    dns_resolutions.entry(pkt.dst_ip.clone()).or_insert_with(|| host.clone());
+                    dns_resolutions
+                        .entry(pkt.dst_ip.clone())
+                        .or_insert_with(|| host.clone());
                 }
                 if let Some(ref host) = pkt.src_host {
-                    dns_resolutions.entry(pkt.src_ip.clone()).or_insert_with(|| host.clone());
+                    dns_resolutions
+                        .entry(pkt.src_ip.clone())
+                        .or_insert_with(|| host.clone());
                 }
             }
 
-            if pkt.protocol == "DNS" && pkt.info.contains("Standard query") && !pkt.info.contains("response") {
+            if pkt.protocol == "DNS"
+                && pkt.info.contains("Standard query")
+                && !pkt.info.contains("response")
+            {
                 if let Some(domain) = pkt.info.split_whitespace().last() {
                     if !dns_queries.contains(&domain.to_string()) && dns_queries.len() < 20 {
                         dns_queries.push(domain.to_string());
@@ -87,12 +94,18 @@ impl NetworkSnapshot {
             match pkt.expert {
                 ExpertSeverity::Error => {
                     if expert_errors.len() < 10 {
-                        expert_errors.push(format!("{} {} → {} {}", pkt.protocol, pkt.src_ip, pkt.dst_ip, pkt.info));
+                        expert_errors.push(format!(
+                            "{} {} → {} {}",
+                            pkt.protocol, pkt.src_ip, pkt.dst_ip, pkt.info
+                        ));
                     }
                 }
                 ExpertSeverity::Warn => {
                     if expert_warnings.len() < 10 {
-                        expert_warnings.push(format!("{} {} → {} {}", pkt.protocol, pkt.src_ip, pkt.dst_ip, pkt.info));
+                        expert_warnings.push(format!(
+                            "{} {} → {} {}",
+                            pkt.protocol, pkt.src_ip, pkt.dst_ip, pkt.info
+                        ));
                     }
                 }
                 _ => {}
@@ -103,7 +116,10 @@ impl NetworkSnapshot {
         top_talkers.sort_by(|a, b| b.1.cmp(&a.1));
         top_talkers.truncate(10);
 
-        let connections_established = connections.iter().filter(|c| c.state == "ESTABLISHED").count();
+        let connections_established = connections
+            .iter()
+            .filter(|c| c.state == "ESTABLISHED")
+            .count();
         let connections_other = connections.len() - connections_established;
 
         let dns_resolutions: Vec<(String, String)> = dns_resolutions.into_iter().collect();
@@ -135,47 +151,78 @@ impl NetworkSnapshot {
         if !self.protocol_counts.is_empty() {
             let mut protos: Vec<_> = self.protocol_counts.iter().collect();
             protos.sort_by(|a, b| b.1.cmp(a.1));
-            let proto_str: Vec<String> = protos.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
+            let proto_str: Vec<String> = protos
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, v))
+                .collect();
             parts.push(format!("Protocol distribution: {}", proto_str.join(", ")));
         }
 
-        parts.push(format!("Bandwidth: RX {} / TX {}", self.bandwidth_rx, self.bandwidth_tx));
+        parts.push(format!(
+            "Bandwidth: RX {} / TX {}",
+            self.bandwidth_rx, self.bandwidth_tx
+        ));
 
         if !self.top_talkers.is_empty() {
-            let talkers: Vec<String> = self.top_talkers.iter()
+            let talkers: Vec<String> = self
+                .top_talkers
+                .iter()
                 .take(5)
                 .map(|(ip, count)| format!("{} ({} pkts)", ip, count))
                 .collect();
             parts.push(format!("Top destinations: {}", talkers.join(", ")));
         }
 
-        parts.push(format!("Active connections: {} established, {} other", self.connections_established, self.connections_other));
+        parts.push(format!(
+            "Active connections: {} established, {} other",
+            self.connections_established, self.connections_other
+        ));
 
         if let Some(gw_rtt) = self.gateway_rtt_ms {
-            parts.push(format!("Gateway: {:.1}ms RTT, {:.0}% loss", gw_rtt, self.gateway_loss_pct));
+            parts.push(format!(
+                "Gateway: {:.1}ms RTT, {:.0}% loss",
+                gw_rtt, self.gateway_loss_pct
+            ));
         }
         if let Some(dns_rtt) = self.dns_rtt_ms {
-            parts.push(format!("DNS: {:.1}ms RTT, {:.0}% loss", dns_rtt, self.dns_loss_pct));
+            parts.push(format!(
+                "DNS: {:.1}ms RTT, {:.0}% loss",
+                dns_rtt, self.dns_loss_pct
+            ));
         }
 
         if !self.dns_queries.is_empty() {
-            parts.push(format!("Recent DNS lookups: {}", self.dns_queries.join(", ")));
+            parts.push(format!(
+                "Recent DNS lookups: {}",
+                self.dns_queries.join(", ")
+            ));
         }
 
         if !self.dns_resolutions.is_empty() {
-            let mappings: Vec<String> = self.dns_resolutions.iter()
+            let mappings: Vec<String> = self
+                .dns_resolutions
+                .iter()
                 .take(30)
                 .map(|(ip, host)| format!("{} → {}", ip, host))
                 .collect();
-            parts.push(format!("DNS resolved addresses:\n  {}", mappings.join("\n  ")));
+            parts.push(format!(
+                "DNS resolved addresses:\n  {}",
+                mappings.join("\n  ")
+            ));
         }
 
         if !self.expert_errors.is_empty() {
-            parts.push(format!("Errors detected:\n  {}", self.expert_errors.join("\n  ")));
+            parts.push(format!(
+                "Errors detected:\n  {}",
+                self.expert_errors.join("\n  ")
+            ));
         }
 
         if !self.expert_warnings.is_empty() {
-            parts.push(format!("Warnings:\n  {}", self.expert_warnings.join("\n  ")));
+            parts.push(format!(
+                "Warnings:\n  {}",
+                self.expert_warnings.join("\n  ")
+            ));
         }
 
         parts.join("\n")
@@ -365,7 +412,13 @@ mod tests {
         }
     }
 
-    fn make_packet(proto: &str, src: &str, dst: &str, info: &str, expert: ExpertSeverity) -> CapturedPacket {
+    fn make_packet(
+        proto: &str,
+        src: &str,
+        dst: &str,
+        info: &str,
+        expert: ExpertSeverity,
+    ) -> CapturedPacket {
         CapturedPacket {
             id: 1,
             timestamp: "00:00:00.000".into(),
@@ -419,7 +472,9 @@ mod tests {
     fn protocol_counting() {
         let packets: Vec<CapturedPacket> = (0..3)
             .map(|_| make_packet("TCP", "10.0.0.1", "10.0.0.2", "", ExpertSeverity::Chat))
-            .chain((0..2).map(|_| make_packet("DNS", "10.0.0.1", "8.8.8.8", "", ExpertSeverity::Chat)))
+            .chain(
+                (0..2).map(|_| make_packet("DNS", "10.0.0.1", "8.8.8.8", "", ExpertSeverity::Chat)),
+            )
             .collect();
 
         let snap = NetworkSnapshot::build(&packets, &[], &make_health(), "0 B/s", "0 B/s");
@@ -436,7 +491,13 @@ mod tests {
             let dst = format!("10.0.0.{}", i);
             let count = (i + 1) as usize; // 1, 2, 3, ... 12
             for _ in 0..count {
-                packets.push(make_packet("TCP", "192.168.1.1", &dst, "", ExpertSeverity::Chat));
+                packets.push(make_packet(
+                    "TCP",
+                    "192.168.1.1",
+                    &dst,
+                    "",
+                    ExpertSeverity::Chat,
+                ));
             }
         }
 
@@ -453,10 +514,28 @@ mod tests {
     #[test]
     fn dns_queries_extracted() {
         let packets = vec![
-            make_packet("DNS", "10.0.0.1", "8.8.8.8", "Standard query A example.com", ExpertSeverity::Chat),
-            make_packet("DNS", "10.0.0.1", "8.8.8.8", "Standard query A test.org", ExpertSeverity::Chat),
+            make_packet(
+                "DNS",
+                "10.0.0.1",
+                "8.8.8.8",
+                "Standard query A example.com",
+                ExpertSeverity::Chat,
+            ),
+            make_packet(
+                "DNS",
+                "10.0.0.1",
+                "8.8.8.8",
+                "Standard query A test.org",
+                ExpertSeverity::Chat,
+            ),
             // Response should NOT be included
-            make_packet("DNS", "8.8.8.8", "10.0.0.1", "Standard query response A example.com 1.2.3.4", ExpertSeverity::Note),
+            make_packet(
+                "DNS",
+                "8.8.8.8",
+                "10.0.0.1",
+                "Standard query response A example.com 1.2.3.4",
+                ExpertSeverity::Note,
+            ),
         ];
 
         let snap = NetworkSnapshot::build(&packets, &[], &make_health(), "0 B/s", "0 B/s");
@@ -469,8 +548,20 @@ mod tests {
     fn expert_errors_and_warnings() {
         let packets = vec![
             make_packet("TCP", "10.0.0.1", "10.0.0.2", "RST", ExpertSeverity::Error),
-            make_packet("TCP", "10.0.0.1", "10.0.0.3", "Zero window", ExpertSeverity::Warn),
-            make_packet("TCP", "10.0.0.1", "10.0.0.4", "normal", ExpertSeverity::Chat),
+            make_packet(
+                "TCP",
+                "10.0.0.1",
+                "10.0.0.3",
+                "Zero window",
+                ExpertSeverity::Warn,
+            ),
+            make_packet(
+                "TCP",
+                "10.0.0.1",
+                "10.0.0.4",
+                "normal",
+                ExpertSeverity::Chat,
+            ),
         ];
 
         let snap = NetworkSnapshot::build(&packets, &[], &make_health(), "0 B/s", "0 B/s");
@@ -496,9 +587,13 @@ mod tests {
 
     #[test]
     fn to_prompt_contains_key_metrics() {
-        let packets = vec![
-            make_packet("TCP", "10.0.0.1", "10.0.0.2", "data", ExpertSeverity::Chat),
-        ];
+        let packets = vec![make_packet(
+            "TCP",
+            "10.0.0.1",
+            "10.0.0.2",
+            "data",
+            ExpertSeverity::Chat,
+        )];
         let conns = vec![make_conn("ESTABLISHED")];
         let snap = NetworkSnapshot::build(&packets, &conns, &make_health(), "1.5 MB/s", "200 KB/s");
         let prompt = snap.to_prompt();

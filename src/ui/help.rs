@@ -35,7 +35,15 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .collect();
 
     let content = Paragraph::new(visible);
-    f.render_widget(content, Rect::new(inner.x, inner.y, inner.width, inner.height.saturating_sub(1)));
+    f.render_widget(
+        content,
+        Rect::new(
+            inner.x,
+            inner.y,
+            inner.width,
+            inner.height.saturating_sub(1),
+        ),
+    );
 
     // Footer hint
     let footer = Paragraph::new(Line::from(vec![
@@ -47,7 +55,12 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         Span::raw(":Close"),
     ]))
     .alignment(Alignment::Center);
-    let footer_area = Rect::new(inner.x, inner.y + inner.height.saturating_sub(1), inner.width, 1);
+    let footer_area = Rect::new(
+        inner.x,
+        inner.y + inner.height.saturating_sub(1),
+        inner.width,
+        1,
+    );
     f.render_widget(footer, footer_area);
 }
 
@@ -76,13 +89,19 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(section_header("GLOBAL KEYS"));
     lines.push(key_line("q", "Quit"));
     lines.push(key_line("Ctrl+C", "Quit"));
-    lines.push(key_line("1-9", "Switch tab (Dash/Conn/Iface/Pkt/Stats/Topo/Time/Insights/Proc)"));
+    lines.push(key_line(
+        "1-9",
+        "Switch tab (Dash/Conn/Iface/Pkt/Stats/Topo/Time/Insights/Proc)",
+    ));
     lines.push(key_line("p", "Pause/resume data collection"));
     lines.push(key_line("r", "Force refresh all data"));
     lines.push(key_line("a", "Request AI analysis (from any tab)"));
     lines.push(key_line("?", "Toggle this help overlay"));
     lines.push(key_line("g", "Toggle GeoIP location display"));
-    lines.push(key_line("t", "Cycle theme (dark/light/solarized/dracula/nord)"));
+    lines.push(key_line(
+        "t",
+        "Cycle theme (dark/light/solarized/dracula/nord)",
+    ));
     lines.push(key_line(",", "Open settings menu (←→ to cycle theme)"));
     lines.push(Line::raw(""));
 
@@ -95,9 +114,18 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(section_header("CONNECTIONS (Tab 2)"));
     lines.push(key_line("↑↓", "Scroll connection list"));
     lines.push(key_line("s", "Cycle sort column"));
-    lines.push(key_line("Enter", "Jump to Packets tab with filter for selected connection"));
-    lines.push(key_line("W (shift)", "Whois lookup for selected connection's remote IP"));
-    lines.push(key_line("T", "Traceroute to selected connection's remote IP"));
+    lines.push(key_line(
+        "Enter",
+        "Jump to Packets tab with filter for selected connection",
+    ));
+    lines.push(key_line(
+        "W (shift)",
+        "Whois lookup for selected connection's remote IP",
+    ));
+    lines.push(key_line(
+        "T",
+        "Traceroute to selected connection's remote IP",
+    ));
     lines.push(key_line("Esc", "Close traceroute overlay"));
     lines.push(Line::raw(""));
 
@@ -122,7 +150,10 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(key_line("m", "Toggle bookmark on selected packet"));
     lines.push(key_line("n", "Jump to next bookmarked packet"));
     lines.push(key_line("N (shift)", "Jump to previous bookmarked packet"));
-    lines.push(key_line("W (shift)", "Whois lookup for selected packet IPs"));
+    lines.push(key_line(
+        "W (shift)",
+        "Whois lookup for selected packet IPs",
+    ));
     lines.push(Line::raw(""));
 
     // STREAM VIEW
@@ -171,7 +202,10 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(section_header("DISPLAY FILTER SYNTAX"));
     lines.push(key_line("tcp, udp, dns, icmp, arp", "Filter by protocol"));
     lines.push(key_line("192.168.1.1", "Match source or destination IP"));
-    lines.push(key_line("ip.src == X / ip.dst == X", "Match specific direction"));
+    lines.push(key_line(
+        "ip.src == X / ip.dst == X",
+        "Match specific direction",
+    ));
     lines.push(key_line("port 443", "Match source or destination port"));
     lines.push(key_line("stream 7", "Match stream index"));
     lines.push(key_line("contains \"text\"", "Search in info/payload"));
@@ -181,18 +215,39 @@ fn build_help_lines() -> Vec<Line<'static>> {
 
     // TCP HANDSHAKE TIMING
     lines.push(section_header("TCP HANDSHAKE TIMING"));
-    lines.push(key_line("⏱ in stream header", "Total 3-way handshake time (SYN→ACK)"));
-    lines.push(key_line("SYN→SA", "Client→Server network RTT (SYN to SYN-ACK)"));
-    lines.push(key_line("SA→ACK", "Server→Client network RTT (SYN-ACK to ACK)"));
-    lines.push(key_line("Shown in:", "Stream view header, status bar, packet detail"));
+    lines.push(key_line(
+        "⏱ in stream header",
+        "Total 3-way handshake time (SYN→ACK)",
+    ));
+    lines.push(key_line(
+        "SYN→SA",
+        "Client→Server network RTT (SYN to SYN-ACK)",
+    ));
+    lines.push(key_line(
+        "SA→ACK",
+        "Server→Client network RTT (SYN-ACK to ACK)",
+    ));
+    lines.push(key_line(
+        "Shown in:",
+        "Stream view header, status bar, packet detail",
+    ));
     lines.push(Line::raw(""));
 
     // EXPERT INFO INDICATORS
     lines.push(section_header("EXPERT INFO INDICATORS"));
     lines.push(key_line("● (red)", "Error: TCP RST, DNS NXDOMAIN/SERVFAIL"));
-    lines.push(key_line("▲ (yellow)", "Warning: Zero window, ICMP unreachable, HTTP 4xx/5xx"));
-    lines.push(key_line("· (cyan)", "Note: TCP FIN, DNS response, TLS Server Hello"));
-    lines.push(key_line("(space)", "Chat: SYN, DNS query, ARP, normal traffic"));
+    lines.push(key_line(
+        "▲ (yellow)",
+        "Warning: Zero window, ICMP unreachable, HTTP 4xx/5xx",
+    ));
+    lines.push(key_line(
+        "· (cyan)",
+        "Note: TCP FIN, DNS response, TLS Server Hello",
+    ));
+    lines.push(key_line(
+        "(space)",
+        "Chat: SYN, DNS query, ARP, normal traffic",
+    ));
 
     lines
 }

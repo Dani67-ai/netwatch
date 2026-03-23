@@ -10,7 +10,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // header
-            Constraint::Min(6),   // process table
+            Constraint::Min(6),    // process table
             Constraint::Length(3), // footer
         ])
         .split(area);
@@ -47,7 +47,9 @@ fn render_process_table(f: &mut Frame, app: &App, area: Rect) {
 
     let ranked = app.process_bandwidth.ranked();
     let visible_rows = area.height.saturating_sub(3) as usize;
-    let scroll = app.process_scroll.min(ranked.len().saturating_sub(visible_rows));
+    let scroll = app
+        .process_scroll
+        .min(ranked.len().saturating_sub(visible_rows));
 
     let rows: Vec<Row> = ranked
         .iter()

@@ -12,10 +12,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),  // header
-            Constraint::Min(8),    // protocol hierarchy table
+            Constraint::Min(8),     // protocol hierarchy table
             Constraint::Length(12), // handshake histogram
-            Constraint::Length(3), // summary bar
-            Constraint::Length(3), // footer
+            Constraint::Length(3),  // summary bar
+            Constraint::Length(3),  // footer
         ])
         .split(area);
 
@@ -202,20 +202,18 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
 
     // Buckets: <1ms, 1-5ms, 5-10ms, 10-50ms, 50-100ms, 100-500ms, >500ms
     let buckets: &[(&str, f64, f64)] = &[
-        ("<1ms",     0.0,    1.0),
-        ("1-5ms",    1.0,    5.0),
-        ("5-10ms",   5.0,   10.0),
-        ("10-50ms", 10.0,   50.0),
-        ("50-100ms",50.0,  100.0),
+        ("<1ms", 0.0, 1.0),
+        ("1-5ms", 1.0, 5.0),
+        ("5-10ms", 5.0, 10.0),
+        ("10-50ms", 10.0, 50.0),
+        ("50-100ms", 50.0, 100.0),
         ("100-500", 100.0, 500.0),
-        (">500ms",  500.0, f64::MAX),
+        (">500ms", 500.0, f64::MAX),
     ];
 
     let counts: Vec<usize> = buckets
         .iter()
-        .map(|(_, lo, hi)| {
-            latencies.iter().filter(|&&v| v >= *lo && v < *hi).count()
-        })
+        .map(|(_, lo, hi)| latencies.iter().filter(|&&v| v >= *lo && v < *hi).count())
         .collect();
 
     let max_count = *counts.iter().max().unwrap_or(&1).max(&1);
@@ -243,7 +241,11 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .zip(counts.iter())
         .map(|((label, _, _), &count)| {
-            let pct = if total > 0 { count as f64 / total as f64 * 100.0 } else { 0.0 };
+            let pct = if total > 0 {
+                count as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            };
             let bar_len = if max_count > 0 {
                 (count as f64 / max_count as f64 * avail_width as f64).round() as usize
             } else {
@@ -261,10 +263,17 @@ fn render_handshake_histogram(f: &mut Frame, app: &App, area: Rect) {
             };
 
             Line::from(vec![
-                Span::styled(format!(" {:>8} ", label), Style::default().fg(t.text_primary)),
+                Span::styled(
+                    format!(" {:>8} ", label),
+                    Style::default().fg(t.text_primary),
+                ),
                 Span::styled("█".repeat(bar_len), Style::default().fg(color)),
                 Span::styled(
-                    if count > 0 { format!(" {} ({:.0}%)", count, pct) } else { String::new() },
+                    if count > 0 {
+                        format!(" {} ({:.0}%)", count, pct)
+                    } else {
+                        String::new()
+                    },
                     Style::default().fg(t.text_muted),
                 ),
             ])

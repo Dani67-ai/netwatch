@@ -29,8 +29,15 @@ pub fn format_bytes_total(bytes: u64) -> String {
 }
 
 const ALL_TABS: &[Tab] = &[
-    Tab::Dashboard, Tab::Connections, Tab::Interfaces, Tab::Packets,
-    Tab::Stats, Tab::Topology, Tab::Timeline, Tab::Insights, Tab::Processes,
+    Tab::Dashboard,
+    Tab::Connections,
+    Tab::Interfaces,
+    Tab::Packets,
+    Tab::Stats,
+    Tab::Topology,
+    Tab::Timeline,
+    Tab::Insights,
+    Tab::Processes,
 ];
 
 fn tab_label(tab: Tab) -> (&'static str, &'static str) {
@@ -51,9 +58,10 @@ fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'sta
     let t = &app.theme;
     let now = chrono::Local::now().format("%H:%M:%S").to_string();
 
-    let mut spans: Vec<Span<'static>> = vec![
-        Span::styled("◉ NetWatch ", Style::default().fg(t.brand).bold()),
-    ];
+    let mut spans: Vec<Span<'static>> = vec![Span::styled(
+        "◉ NetWatch ",
+        Style::default().fg(t.brand).bold(),
+    )];
 
     for (i, &tab) in ALL_TABS.iter().enumerate() {
         if i > 0 {
@@ -62,7 +70,10 @@ fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'sta
         let (num, name) = tab_label(tab);
         let label = format!("[{}] {}", num, name);
         if tab == app.current_tab {
-            spans.push(Span::styled(label, Style::default().fg(t.active_tab).bold()));
+            spans.push(Span::styled(
+                label,
+                Style::default().fg(t.active_tab).bold(),
+            ));
         } else {
             spans.push(Span::styled(label, Style::default().fg(t.inactive_tab)));
         }
@@ -97,15 +108,21 @@ fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'sta
 
 pub fn render_header(f: &mut Frame, app: &App, area: Rect) {
     let line = build_header_spans(app, None);
-    let header = Paragraph::new(line)
-        .block(Block::default().borders(Borders::BOTTOM).border_style(Style::default().fg(app.theme.border)));
+    let header = Paragraph::new(line).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(app.theme.border)),
+    );
     f.render_widget(header, area);
 }
 
 pub fn render_header_with_extra(f: &mut Frame, app: &App, area: Rect, extra: Vec<Span<'static>>) {
     let line = build_header_spans(app, Some(extra));
-    let header = Paragraph::new(line)
-        .block(Block::default().borders(Borders::BOTTOM).border_style(Style::default().fg(app.theme.border)));
+    let header = Paragraph::new(line).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(app.theme.border)),
+    );
     f.render_widget(header, area);
 }
 
@@ -215,11 +232,17 @@ pub fn render_footer(f: &mut Frame, app: &App, area: Rect, context_hints: Vec<Sp
         if i > 0 {
             spans.push(Span::raw("  "));
         }
-        spans.push(Span::styled(format!("{}", key), Style::default().fg(t.key_hint).bold()));
+        spans.push(Span::styled(
+            format!("{}", key),
+            Style::default().fg(t.key_hint).bold(),
+        ));
         spans.push(Span::raw(format!(":{}", desc)));
     }
 
-    let footer = Paragraph::new(Line::from(spans))
-        .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(t.border)));
+    let footer = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(t.border)),
+    );
     f.render_widget(footer, area);
 }

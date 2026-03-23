@@ -128,7 +128,9 @@ impl ConnectionTimeline {
 
         // Evict oldest inactive connections if over limit
         if self.tracked.len() > MAX_TRACKED_CONNECTIONS {
-            let mut inactive_indices: Vec<usize> = self.tracked.iter()
+            let mut inactive_indices: Vec<usize> = self
+                .tracked
+                .iter()
                 .enumerate()
                 .filter(|(_, t)| !t.is_active)
                 .map(|(i, _)| i)
@@ -139,7 +141,8 @@ impl ConnectionTimeline {
             let remove_set: HashSet<usize> = inactive_indices.into_iter().take(to_remove).collect();
 
             if !remove_set.is_empty() {
-                let removed_keys: Vec<ConnectionKey> = remove_set.iter()
+                let removed_keys: Vec<ConnectionKey> = remove_set
+                    .iter()
                     .map(|&i| self.tracked[i].key.clone())
                     .collect();
                 for key in &removed_keys {
@@ -188,13 +191,13 @@ fn parse_lsof() -> Vec<Connection> {
     // pushing the connection until the next file descriptor (f) or process (p)
     // boundary, or end-of-input.
     let flush = |connections: &mut Vec<Connection>,
-                     has_network: &mut bool,
-                     protocol: &str,
-                     local_addr: &str,
-                     remote_addr: &str,
-                     state: &str,
-                     pid: Option<u32>,
-                     process_name: &Option<String>| {
+                 has_network: &mut bool,
+                 protocol: &str,
+                 local_addr: &str,
+                 remote_addr: &str,
+                 state: &str,
+                 pid: Option<u32>,
+                 process_name: &Option<String>| {
         if *has_network {
             connections.push(Connection {
                 protocol: protocol.to_string(),
@@ -219,7 +222,16 @@ fn parse_lsof() -> Vec<Connection> {
 
         match tag {
             b'p' => {
-                flush(&mut connections, &mut has_network, &protocol, &local_addr, &remote_addr, &state, pid, &process_name);
+                flush(
+                    &mut connections,
+                    &mut has_network,
+                    &protocol,
+                    &local_addr,
+                    &remote_addr,
+                    &state,
+                    pid,
+                    &process_name,
+                );
                 pid = value.parse().ok();
                 process_name = None;
             }
@@ -227,7 +239,16 @@ fn parse_lsof() -> Vec<Connection> {
                 process_name = Some(value.to_string());
             }
             b'f' => {
-                flush(&mut connections, &mut has_network, &protocol, &local_addr, &remote_addr, &state, pid, &process_name);
+                flush(
+                    &mut connections,
+                    &mut has_network,
+                    &protocol,
+                    &local_addr,
+                    &remote_addr,
+                    &state,
+                    pid,
+                    &process_name,
+                );
                 protocol = String::new();
                 state = String::new();
             }
@@ -242,8 +263,12 @@ fn parse_lsof() -> Vec<Connection> {
             }
             b'n' => {
                 if let Some(arrow_pos) = value.find("->") {
-                    local_addr = value[..arrow_pos].trim_matches(|c| c == '[' || c == ']').to_string();
-                    remote_addr = value[arrow_pos + 2..].trim_matches(|c| c == '[' || c == ']').to_string();
+                    local_addr = value[..arrow_pos]
+                        .trim_matches(|c| c == '[' || c == ']')
+                        .to_string();
+                    remote_addr = value[arrow_pos + 2..]
+                        .trim_matches(|c| c == '[' || c == ']')
+                        .to_string();
                 } else {
                     local_addr = value.to_string();
                     remote_addr = "*:*".to_string();
@@ -255,7 +280,16 @@ fn parse_lsof() -> Vec<Connection> {
     }
 
     // Flush the last pending connection
-    flush(&mut connections, &mut has_network, &protocol, &local_addr, &remote_addr, &state, pid, &process_name);
+    flush(
+        &mut connections,
+        &mut has_network,
+        &protocol,
+        &local_addr,
+        &remote_addr,
+        &state,
+        pid,
+        &process_name,
+    );
 
     connections
 }
@@ -301,10 +335,7 @@ fn parse_linux_connections() -> Vec<Connection> {
 #[cfg(target_os = "linux")]
 fn parse_ss_process(field: &str) -> (Option<u32>, Option<String>) {
     // Format: users:(("process",pid=1234,fd=3))
-    let name = field
-        .split('"')
-        .nth(1)
-        .map(|s| s.to_string());
+    let name = field.split('"').nth(1).map(|s| s.to_string());
 
     let pid = field
         .split("pid=")
@@ -322,7 +353,10 @@ fn resolve_pids(pids: &[u32]) -> HashMap<u32, String> {
         return map;
     }
 
-    let output = match Command::new("tasklist").args(["/FO", "CSV", "/NH"]).output() {
+    let output = match Command::new("tasklist")
+        .args(["/FO", "CSV", "/NH"])
+        .output()
+    {
         Ok(o) => o,
         Err(_) => return map,
     };
@@ -382,14 +416,26 @@ fn parse_windows_connections() -> Vec<Connection> {
                 continue;
             }
             let pid: Option<u32> = cols[3].parse().ok();
-            (cols[0].to_string(), cols[1].to_string(), cols[2].to_string(), String::new(), pid)
+            (
+                cols[0].to_string(),
+                cols[1].to_string(),
+                cols[2].to_string(),
+                String::new(),
+                pid,
+            )
         } else {
             // TCP lines: Proto LocalAddr ForeignAddr State PID
             if cols.len() < 5 {
                 continue;
             }
             let pid: Option<u32> = cols[4].parse().ok();
-            (cols[0].to_string(), cols[1].to_string(), cols[2].to_string(), cols[3].to_string(), pid)
+            (
+                cols[0].to_string(),
+                cols[1].to_string(),
+                cols[2].to_string(),
+                cols[3].to_string(),
+                pid,
+            )
         };
 
         if let Some(p) = pid {
@@ -425,19 +471,23 @@ pub fn export_json(connections: &[Connection], path: &str) -> Result<usize, Stri
     use std::io::Write;
     let mut file = std::fs::File::create(path).map_err(|e| format!("Create error: {e}"))?;
 
-    let entries: Vec<serde_json::Value> = connections.iter().map(|c| {
-        serde_json::json!({
-            "process": c.process_name.as_deref().unwrap_or("—"),
-            "pid": c.pid,
-            "protocol": c.protocol,
-            "state": c.state,
-            "local_address": c.local_addr,
-            "remote_address": c.remote_addr,
+    let entries: Vec<serde_json::Value> = connections
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "process": c.process_name.as_deref().unwrap_or("—"),
+                "pid": c.pid,
+                "protocol": c.protocol,
+                "state": c.state,
+                "local_address": c.local_addr,
+                "remote_address": c.remote_addr,
+            })
         })
-    }).collect();
+        .collect();
 
     let json = serde_json::to_string_pretty(&entries).map_err(|e| format!("JSON error: {e}"))?;
-    file.write_all(json.as_bytes()).map_err(|e| format!("Write error: {e}"))?;
+    file.write_all(json.as_bytes())
+        .map_err(|e| format!("Write error: {e}"))?;
     Ok(connections.len())
 }
 
@@ -446,18 +496,24 @@ pub fn export_csv(connections: &[Connection], path: &str) -> Result<usize, Strin
     use std::io::Write;
     let mut file = std::fs::File::create(path).map_err(|e| format!("Create error: {e}"))?;
 
-    writeln!(file, "process,pid,protocol,state,local_address,remote_address")
-        .map_err(|e| format!("Write error: {e}"))?;
+    writeln!(
+        file,
+        "process,pid,protocol,state,local_address,remote_address"
+    )
+    .map_err(|e| format!("Write error: {e}"))?;
 
     for c in connections {
-        writeln!(file, "{},{},{},{},{},{}",
+        writeln!(
+            file,
+            "{},{},{},{},{},{}",
             c.process_name.as_deref().unwrap_or("—"),
             c.pid.map(|p| p.to_string()).unwrap_or_else(|| "—".into()),
             c.protocol,
             c.state,
             c.local_addr,
             c.remote_addr,
-        ).map_err(|e| format!("Write error: {e}"))?;
+        )
+        .map_err(|e| format!("Write error: {e}"))?;
     }
 
     Ok(connections.len())
@@ -500,7 +556,13 @@ mod tests {
     #[test]
     fn update_marks_existing_connections_active() {
         let mut tl = ConnectionTimeline::new();
-        let conns = vec![make_conn("TCP", "127.0.0.1:8080", "10.0.0.1:443", "ESTABLISHED", 100)];
+        let conns = vec![make_conn(
+            "TCP",
+            "127.0.0.1:8080",
+            "10.0.0.1:443",
+            "ESTABLISHED",
+            100,
+        )];
         tl.update(&conns);
         tl.update(&conns);
         assert_eq!(tl.tracked.len(), 1);
@@ -510,7 +572,13 @@ mod tests {
     #[test]
     fn update_marks_disappeared_connections_inactive() {
         let mut tl = ConnectionTimeline::new();
-        let conns = vec![make_conn("TCP", "127.0.0.1:8080", "10.0.0.1:443", "ESTABLISHED", 100)];
+        let conns = vec![make_conn(
+            "TCP",
+            "127.0.0.1:8080",
+            "10.0.0.1:443",
+            "ESTABLISHED",
+            100,
+        )];
         tl.update(&conns);
         tl.update(&[]);
         assert_eq!(tl.tracked.len(), 1);
@@ -520,11 +588,23 @@ mod tests {
     #[test]
     fn update_changes_state() {
         let mut tl = ConnectionTimeline::new();
-        let c1 = vec![make_conn("TCP", "127.0.0.1:8080", "10.0.0.1:443", "ESTABLISHED", 100)];
+        let c1 = vec![make_conn(
+            "TCP",
+            "127.0.0.1:8080",
+            "10.0.0.1:443",
+            "ESTABLISHED",
+            100,
+        )];
         tl.update(&c1);
         assert_eq!(tl.tracked[0].state, "ESTABLISHED");
 
-        let c2 = vec![make_conn("TCP", "127.0.0.1:8080", "10.0.0.1:443", "TIME_WAIT", 100)];
+        let c2 = vec![make_conn(
+            "TCP",
+            "127.0.0.1:8080",
+            "10.0.0.1:443",
+            "TIME_WAIT",
+            100,
+        )];
         tl.update(&c2);
         assert_eq!(tl.tracked[0].state, "TIME_WAIT");
     }
@@ -565,7 +645,13 @@ mod tests {
     #[test]
     fn inactive_connection_becomes_active_on_reappearance() {
         let mut tl = ConnectionTimeline::new();
-        let conns = vec![make_conn("TCP", "127.0.0.1:8080", "10.0.0.1:443", "ESTABLISHED", 100)];
+        let conns = vec![make_conn(
+            "TCP",
+            "127.0.0.1:8080",
+            "10.0.0.1:443",
+            "ESTABLISHED",
+            100,
+        )];
         tl.update(&conns);
         tl.update(&[]);
         assert!(!tl.tracked[0].is_active);
@@ -579,7 +665,15 @@ mod tests {
 
         // Add MAX_TRACKED_CONNECTIONS active connections
         let conns: Vec<Connection> = (0..MAX_TRACKED_CONNECTIONS as u32)
-            .map(|i| make_conn("TCP", &format!("127.0.0.1:{}", i), "10.0.0.1:443", "ESTABLISHED", i))
+            .map(|i| {
+                make_conn(
+                    "TCP",
+                    &format!("127.0.0.1:{}", i),
+                    "10.0.0.1:443",
+                    "ESTABLISHED",
+                    i,
+                )
+            })
             .collect();
         tl.update(&conns);
         assert_eq!(tl.tracked.len(), MAX_TRACKED_CONNECTIONS);
@@ -587,7 +681,15 @@ mod tests {
         // Mark all as inactive, then add new ones to exceed the limit
         tl.update(&[]);
         let extra: Vec<Connection> = (0..10u32)
-            .map(|i| make_conn("TCP", &format!("192.168.0.1:{}", i), "10.0.0.1:443", "ESTABLISHED", 50000 + i))
+            .map(|i| {
+                make_conn(
+                    "TCP",
+                    &format!("192.168.0.1:{}", i),
+                    "10.0.0.1:443",
+                    "ESTABLISHED",
+                    50000 + i,
+                )
+            })
             .collect();
         tl.update(&extra);
 
@@ -623,7 +725,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("test.json");
 
-        let conns = vec![make_conn("TCP", "127.0.0.1:80", "10.0.0.1:443", "ESTABLISHED", 100)];
+        let conns = vec![make_conn(
+            "TCP",
+            "127.0.0.1:80",
+            "10.0.0.1:443",
+            "ESTABLISHED",
+            100,
+        )];
         let count = export_json(&conns, path.to_str().unwrap()).unwrap();
         assert_eq!(count, 1);
 

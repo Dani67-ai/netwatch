@@ -56,14 +56,27 @@ impl MaxMindReader {
             // Try City decode first (superset of Country)
             if let Some(city_rec) = result.decode::<maxminddb::geoip2::City>().ok().flatten() {
                 let cc = city_rec.country.iso_code.unwrap_or_default().to_string();
-                let cn = city_rec.country.names.english.unwrap_or_default().to_string();
+                let cn = city_rec
+                    .country
+                    .names
+                    .english
+                    .unwrap_or_default()
+                    .to_string();
                 let ct = city_rec.city.names.english.unwrap_or_default().to_string();
                 (cc, cn, ct)
             } else {
                 let result = reader.lookup(addr).ok()?;
-                let country_rec = result.decode::<maxminddb::geoip2::Country>().ok().flatten()?;
+                let country_rec = result
+                    .decode::<maxminddb::geoip2::Country>()
+                    .ok()
+                    .flatten()?;
                 let cc = country_rec.country.iso_code.unwrap_or_default().to_string();
-                let cn = country_rec.country.names.english.unwrap_or_default().to_string();
+                let cn = country_rec
+                    .country
+                    .names
+                    .english
+                    .unwrap_or_default()
+                    .to_string();
                 (cc, cn, String::new())
             }
         } else {
@@ -76,10 +89,7 @@ impl MaxMindReader {
                 .lookup(addr)
                 .ok()
                 .and_then(|r| r.decode::<maxminddb::geoip2::Asn>().ok().flatten())
-                .and_then(|asn| {
-                    asn.autonomous_system_organization
-                        .map(|s| s.to_string())
-                })
+                .and_then(|asn| asn.autonomous_system_organization.map(|s| s.to_string()))
                 .unwrap_or_default()
         } else {
             String::new()

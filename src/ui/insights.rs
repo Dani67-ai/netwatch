@@ -10,7 +10,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // header
+            Constraint::Length(3), // header
             Constraint::Length(3), // status bar
             Constraint::Min(8),    // insights content
             Constraint::Length(3), // footer
@@ -54,9 +54,10 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
         ),
     };
 
-    let status_bar = Paragraph::new(Line::from(vec![
-        Span::styled(format!(" {} ", status_text), status_style),
-    ]))
+    let status_bar = Paragraph::new(Line::from(vec![Span::styled(
+        format!(" {} ", status_text),
+        status_style,
+    )]))
     .block(
         Block::default()
             .title(" AI Analysis ")
@@ -151,8 +152,14 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
 
     // Apply scroll
     let total_lines = lines.len();
-    let scroll = app.insights_scroll.min(total_lines.saturating_sub(visible_height));
-    let visible_lines: Vec<Line> = lines.into_iter().skip(scroll).take(visible_height).collect();
+    let scroll = app
+        .insights_scroll
+        .min(total_lines.saturating_sub(visible_height));
+    let visible_lines: Vec<Line> = lines
+        .into_iter()
+        .skip(scroll)
+        .take(visible_height)
+        .collect();
 
     let content = Paragraph::new(visible_lines).wrap(Wrap { trim: false });
     f.render_widget(content, inner);

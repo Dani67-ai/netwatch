@@ -8,15 +8,23 @@ use ratatui::{
 };
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
-    let chart_height = if app.selected_interface.is_some() { 5 } else { 10 };
+    let chart_height = if app.selected_interface.is_some() {
+        5
+    } else {
+        10
+    };
     let alert_count = app.network_intel.active_alert_count();
-    let alert_height = if alert_count > 0 { (alert_count as u16).min(3) + 2 } else { 0 };
+    let alert_height = if alert_count > 0 {
+        (alert_count as u16).min(3) + 2
+    } else {
+        0
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),            // header
             Constraint::Length(alert_height), // alerts (0 if none)
-            Constraint::Min(6),              // interface table
+            Constraint::Min(6),               // interface table
             Constraint::Length(chart_height), // bandwidth graph or per-iface sparkline
             Constraint::Length(7),            // top connections
             Constraint::Length(4),            // health status
@@ -49,29 +57,40 @@ fn render_alerts(f: &mut Frame, app: &App, area: Rect) {
     use crate::collectors::network_intel::AlertSeverity;
 
     let alerts = app.network_intel.active_alerts();
-    let lines: Vec<Line> = alerts.iter().take(3).map(|alert| {
-        let (icon, style) = match alert.severity {
-            AlertSeverity::Critical => ("● ", Style::default().fg(app.theme.status_error).bold()),
-            AlertSeverity::Warning => ("▲ ", Style::default().fg(app.theme.status_warn)),
-        };
-        Line::from(vec![
-            Span::styled(icon, style),
-            Span::styled(alert.category.label(), style),
-            Span::raw(": "),
-            Span::styled(alert.message.clone(), Style::default().fg(app.theme.text_primary)),
-            Span::raw("  "),
-            Span::styled(alert.detail.clone(), Style::default().fg(app.theme.text_muted)),
-        ])
-    }).collect();
+    let lines: Vec<Line> = alerts
+        .iter()
+        .take(3)
+        .map(|alert| {
+            let (icon, style) = match alert.severity {
+                AlertSeverity::Critical => {
+                    ("● ", Style::default().fg(app.theme.status_error).bold())
+                }
+                AlertSeverity::Warning => ("▲ ", Style::default().fg(app.theme.status_warn)),
+            };
+            Line::from(vec![
+                Span::styled(icon, style),
+                Span::styled(alert.category.label(), style),
+                Span::raw(": "),
+                Span::styled(
+                    alert.message.clone(),
+                    Style::default().fg(app.theme.text_primary),
+                ),
+                Span::raw("  "),
+                Span::styled(
+                    alert.detail.clone(),
+                    Style::default().fg(app.theme.text_muted),
+                ),
+            ])
+        })
+        .collect();
 
-    let alert_widget = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .title(format!(" ⚠ Alerts ({}) ", alerts.len()))
-                .title_style(Style::default().fg(app.theme.status_warn).bold())
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(app.theme.status_warn)),
-        );
+    let alert_widget = Paragraph::new(lines).block(
+        Block::default()
+            .title(format!(" ⚠ Alerts ({}) ", alerts.len()))
+            .title_style(Style::default().fg(app.theme.status_warn).bold())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(app.theme.status_warn)),
+    );
     f.render_widget(alert_widget, area);
 }
 
@@ -129,8 +148,10 @@ fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 name_cell,
                 Cell::from(ip),
-                Cell::from(widgets::format_bytes_rate(iface.rx_rate)).style(Style::default().fg(app.theme.rx_rate)),
-                Cell::from(widgets::format_bytes_rate(iface.tx_rate)).style(Style::default().fg(app.theme.tx_rate)),
+                Cell::from(widgets::format_bytes_rate(iface.rx_rate))
+                    .style(Style::default().fg(app.theme.rx_rate)),
+                Cell::from(widgets::format_bytes_rate(iface.tx_rate))
+                    .style(Style::default().fg(app.theme.tx_rate)),
                 Cell::from(widgets::format_bytes_total(iface.rx_bytes_total)),
                 Cell::from(widgets::format_bytes_total(iface.tx_bytes_total)),
                 Cell::from(if is_up { "UP" } else { "DOWN" }).style(status_style),
@@ -163,7 +184,9 @@ fn render_interface_table(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_sparkline(f: &mut Frame, app: &App, area: Rect) {
-    let selected = app.selected_interface.and_then(|i| app.traffic.interfaces.get(i));
+    let selected = app
+        .selected_interface
+        .and_then(|i| app.traffic.interfaces.get(i));
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -194,8 +217,11 @@ fn render_sparkline(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(rx_spark, chunks[0]);
         f.render_widget(tx_spark, chunks[1]);
     } else {
-        let empty = Paragraph::new("No interface selected")
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(app.theme.border)));
+        let empty = Paragraph::new("No interface selected").block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(app.theme.border)),
+        );
         f.render_widget(empty, area);
     }
 }
@@ -244,7 +270,11 @@ fn render_bandwidth_graph(f: &mut Frame, app: &App, area: Rect) {
     let total_rx: f64 = active.iter().map(|i| i.rx_rate).sum();
     let total_tx: f64 = active.iter().map(|i| i.tx_rate).sum();
 
-    let iface_names: String = active.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("+");
+    let iface_names: String = active
+        .iter()
+        .map(|i| i.name.as_str())
+        .collect::<Vec<_>>()
+        .join("+");
 
     // Split into RX sparkline (top) and TX sparkline (bottom)
     let chunks = Layout::default()
@@ -380,12 +410,16 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         .sum();
 
     let ebpf_span = match &app.ebpf_status {
-        EbpfStatus::Active => Span::styled("eBPF: ● active", Style::default().fg(app.theme.status_good)),
+        EbpfStatus::Active => {
+            Span::styled("eBPF: ● active", Style::default().fg(app.theme.status_good))
+        }
         EbpfStatus::Unavailable(reason) => Span::styled(
             format!("eBPF: ⚠ {reason}"),
             Style::default().fg(app.theme.status_warn),
         ),
-        EbpfStatus::NotCompiled => Span::styled("eBPF: off", Style::default().fg(app.theme.text_muted)),
+        EbpfStatus::NotCompiled => {
+            Span::styled("eBPF: off", Style::default().fg(app.theme.text_muted))
+        }
     };
 
     let line1 = Line::from(vec![
@@ -409,14 +443,13 @@ fn render_health(f: &mut Frame, app: &App, area: Rect) {
         ebpf_span,
     ]);
 
-    let health = Paragraph::new(vec![line1, line2])
-        .block(
-            Block::default()
-                .title(" Health ")
-                .title_style(Style::default().fg(app.theme.brand))
-                .borders(Borders::LEFT)
-                .border_style(Style::default().fg(app.theme.brand)),
-        );
+    let health = Paragraph::new(vec![line1, line2]).block(
+        Block::default()
+            .title(" Health ")
+            .title_style(Style::default().fg(app.theme.brand))
+            .borders(Borders::LEFT)
+            .border_style(Style::default().fg(app.theme.brand)),
+    );
 
     f.render_widget(health, area);
 }
@@ -492,10 +525,15 @@ fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
     let hs = app.health_prober.status.lock().unwrap();
 
     // Gateway row
-    let mut gw_spans: Vec<Span> = vec![
-        Span::styled(" GW  ", Style::default().fg(app.theme.brand).bold()),
-    ];
-    gw_spans.extend(rtt_heatmap_spans(hs.gateway_rtt_history.as_slices().0, avail_width, &app.theme));
+    let mut gw_spans: Vec<Span> = vec![Span::styled(
+        " GW  ",
+        Style::default().fg(app.theme.brand).bold(),
+    )];
+    gw_spans.extend(rtt_heatmap_spans(
+        hs.gateway_rtt_history.as_slices().0,
+        avail_width,
+        &app.theme,
+    ));
     if let Some(rtt) = hs.gateway_rtt_ms {
         gw_spans.push(Span::styled(
             format!(" {:.1}ms", rtt),
@@ -505,10 +543,15 @@ fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
     let gw_line = Line::from(gw_spans);
 
     // DNS row
-    let mut dns_spans: Vec<Span> = vec![
-        Span::styled(" DNS ", Style::default().fg(app.theme.brand).bold()),
-    ];
-    dns_spans.extend(rtt_heatmap_spans(hs.dns_rtt_history.as_slices().0, avail_width, &app.theme));
+    let mut dns_spans: Vec<Span> = vec![Span::styled(
+        " DNS ",
+        Style::default().fg(app.theme.brand).bold(),
+    )];
+    dns_spans.extend(rtt_heatmap_spans(
+        hs.dns_rtt_history.as_slices().0,
+        avail_width,
+        &app.theme,
+    ));
     if let Some(rtt) = hs.dns_rtt_ms {
         dns_spans.push(Span::styled(
             format!(" {:.1}ms", rtt),

@@ -111,8 +111,8 @@ impl NetwatchConfig {
 
     /// Write current config to disk, creating parent directories as needed.
     pub fn save(&self) -> anyhow::Result<()> {
-        let path = Self::path()
-            .ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))?;
+        let path =
+            Self::path().ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -295,8 +295,7 @@ bandwidth_threshold = 50000000
         let contents = toml::to_string_pretty(&cfg).unwrap();
         fs::write(&path, &contents).unwrap();
 
-        let loaded: NetwatchConfig =
-            toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let loaded: NetwatchConfig = toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(loaded.default_tab, "stats");
         assert_eq!(loaded.refresh_rate_ms, 750);
         assert!(loaded.show_geo); // default

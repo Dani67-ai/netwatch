@@ -145,7 +145,9 @@ impl std::hash::Hash for DnsTxnKey {
 
 impl PartialEq for DnsTxnKey {
     fn eq(&self, other: &Self) -> bool {
-        self.txid == other.txid && self.client_ip == other.client_ip && self.server_ip == other.server_ip
+        self.txid == other.txid
+            && self.client_ip == other.client_ip
+            && self.server_ip == other.server_ip
     }
 }
 
@@ -179,7 +181,7 @@ pub struct NetworkIntelCollector {
     // Anomaly
     scan_states: HashMap<String, ScanState>,
     beacon_states: HashMap<BeaconKey, BeaconState>,
-    
+
     // DNS
     domain_counts: HashMap<String, u32>,
     domain_tunnel_stats: HashMap<String, DomainStats>,
@@ -188,15 +190,15 @@ pub struct NetworkIntelCollector {
     dns_total_responses: u64,
     dns_nxdomain: u64,
     dns_latency_buckets: [u64; 8],
-    
+
     // Bandwidth
     bw_states: HashMap<String, BwAlertState>,
     bw_default_threshold: u64, // bytes/sec, 0 = disabled
-    
+
     // Alerts
     active_alerts: Vec<Alert>,
     alert_history: VecDeque<Alert>,
-    
+
     // Housekeeping
     last_prune: Instant,
 }
@@ -232,7 +234,9 @@ impl NetworkIntelCollector {
     }
 
     pub fn dns_analytics(&self) -> DnsAnalytics {
-        let mut top: Vec<(String, u32)> = self.domain_counts.iter()
+        let mut top: Vec<(String, u32)> = self
+            .domain_counts
+            .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         top.sort_by(|a, b| b.1.cmp(&a.1));
@@ -266,7 +270,8 @@ impl NetworkIntelCollector {
             now.duration_since(v.sent_at) < Duration::from_secs(DNS_OUTSTANDING_TIMEOUT_SECS)
         });
         // Expire old active alerts (older than 60s)
-        self.active_alerts.retain(|a| now.duration_since(a.timestamp) < Duration::from_secs(60));
+        self.active_alerts
+            .retain(|a| now.duration_since(a.timestamp) < Duration::from_secs(60));
     }
 
     // ── Event handlers ─────────────────────────────────────
@@ -286,12 +291,15 @@ impl NetworkIntelCollector {
         *self.domain_counts.entry(base_domain.clone()).or_insert(0) += 1;
 
         // Track for tunnel detection
-        let stats = self.domain_tunnel_stats.entry(base_domain).or_insert_with(|| DomainStats {
-            count: 0,
-            max_qname_len: 0,
-            unique_prefixes: HashSet::new(),
-            window_start: now,
-        });
+        let stats = self
+            .domain_tunnel_stats
+            .entry(base_domain)
+            .or_insert_with(|| DomainStats {
+                count: 0,
+                max_qname_len: 0,
+                unique_prefixes: HashSet::new(),
+                window_start: now,
+            });
         stats.count += 1;
         if event.qname.len() > stats.max_qname_len {
             stats.max_qname_len = event.qname.len();
@@ -311,10 +319,13 @@ impl NetworkIntelCollector {
             client_ip: event.client_ip,
             server_ip: event.server_ip,
         };
-        self.outstanding_dns.insert(key, OutstandingDns {
-            sent_at: now,
-            qname: event.qname,
-        });
+        self.outstanding_dns.insert(
+            key,
+            OutstandingDns {
+                sent_at: now,
+                qname: event.qname,
+            },
+        );
     }
 
     pub fn on_dns_response(&mut self, event: DnsResponseEvent) {
@@ -333,25 +344,37 @@ impl NetworkIntelCollector {
         if let Some(outstanding) = self.outstanding_dns.remove(&key) {
             let latency = now.duration_since(outstanding.sent_at);
             let ms = latency.as_secs_f64() * 1000.0;
-            let bucket = if ms < 5.0 { 0 }
-                else if ms < 10.0 { 1 }
-                else if ms < 25.0 { 2 }
-                else if ms < 50.0 { 3 }
-                else if ms < 100.0 { 4 }
-                else if ms < 250.0 { 5 }
-                else if ms < 500.0 { 6 }
-                else { 7 };
+            let bucket = if ms < 5.0 {
+                0
+            } else if ms < 10.0 {
+                1
+            } else if ms < 25.0 {
+                2
+            } else if ms < 50.0 {
+                3
+            } else if ms < 100.0 {
+                4
+            } else if ms < 250.0 {
+                5
+            } else if ms < 500.0 {
+                6
+            } else {
+                7
+            };
             self.dns_latency_buckets[bucket] += 1;
         }
     }
 
     pub fn on_interface_rate(&mut self, event: InterfaceRateEvent) {
-        let state = self.bw_states.entry(event.iface.clone()).or_insert_with(|| BwAlertState {
-            consecutive_over: 0,
-            active: false,
-            threshold_rx: self.bw_default_threshold,
-            threshold_tx: self.bw_default_threshold,
-        });
+        let state = self
+            .bw_states
+            .entry(event.iface.clone())
+            .or_insert_with(|| BwAlertState {
+                consecutive_over: 0,
+                active: false,
+                threshold_rx: self.bw_default_threshold,
+                threshold_tx: self.bw_default_threshold,
+            });
 
         let over = event.rx_bps > state.threshold_rx || event.tx_bps > state.threshold_tx;
         if over {
@@ -365,7 +388,12 @@ impl NetworkIntelCollector {
                     format_bytes(event.tx_bps),
                     format_bytes(state.threshold_rx),
                 );
-                self.push_alert(AlertSeverity::Warning, AlertCategory::Bandwidth, msg, detail);
+                self.push_alert(
+                    AlertSeverity::Warning,
+                    AlertCategory::Bandwidth,
+                    msg,
+                    detail,
+                );
             }
         } else {
             let clear_rx = (state.threshold_rx as f64 * BW_ALERT_CLEAR_RATIO) as u64;
@@ -380,16 +408,21 @@ impl NetworkIntelCollector {
     // ── Internal detection logic ───────────────────────────
 
     fn detect_port_scan(&mut self, event: &ConnAttemptEvent, now: Instant) {
-        if self.scan_states.len() >= MAX_TRACKED_IPS && !self.scan_states.contains_key(&event.src_ip) {
+        if self.scan_states.len() >= MAX_TRACKED_IPS
+            && !self.scan_states.contains_key(&event.src_ip)
+        {
             return;
         }
 
-        let state = self.scan_states.entry(event.src_ip.clone()).or_insert_with(|| ScanState {
-            window_start: now,
-            last_seen: now,
-            ports: HashSet::new(),
-            alerted: false,
-        });
+        let state = self
+            .scan_states
+            .entry(event.src_ip.clone())
+            .or_insert_with(|| ScanState {
+                window_start: now,
+                last_seen: now,
+                ports: HashSet::new(),
+                alerted: false,
+            });
 
         // Reset window if expired
         if now.duration_since(state.window_start) > Duration::from_secs(PORT_SCAN_WINDOW_SECS) {
@@ -411,7 +444,12 @@ impl NetworkIntelCollector {
                 PORT_SCAN_WINDOW_SECS,
                 event.dst_ip,
             );
-            self.push_alert(AlertSeverity::Critical, AlertCategory::PortScan, msg, detail);
+            self.push_alert(
+                AlertSeverity::Critical,
+                AlertCategory::PortScan,
+                msg,
+                detail,
+            );
         }
     }
 
@@ -422,15 +460,19 @@ impl NetworkIntelCollector {
             dst_port: event.dst_port,
         };
 
-        if self.beacon_states.len() >= MAX_TRACKED_BEACONS && !self.beacon_states.contains_key(&key) {
+        if self.beacon_states.len() >= MAX_TRACKED_BEACONS && !self.beacon_states.contains_key(&key)
+        {
             return;
         }
 
-        let state = self.beacon_states.entry(key.clone()).or_insert_with(|| BeaconState {
-            last_seen: now,
-            deltas: VecDeque::new(),
-            alerted: false,
-        });
+        let state = self
+            .beacon_states
+            .entry(key.clone())
+            .or_insert_with(|| BeaconState {
+                last_seen: now,
+                deltas: VecDeque::new(),
+                alerted: false,
+            });
 
         let delta = now.duration_since(state.last_seen);
         state.last_seen = now;
@@ -444,13 +486,17 @@ impl NetworkIntelCollector {
         }
 
         if state.deltas.len() >= BEACON_MIN_SAMPLES && !state.alerted {
-            let mean = state.deltas.iter().map(|d| d.as_secs_f64()).sum::<f64>() / state.deltas.len() as f64;
-            let variance = state.deltas.iter()
+            let mean = state.deltas.iter().map(|d| d.as_secs_f64()).sum::<f64>()
+                / state.deltas.len() as f64;
+            let variance = state
+                .deltas
+                .iter()
                 .map(|d| {
                     let diff = d.as_secs_f64() - mean;
                     diff * diff
                 })
-                .sum::<f64>() / state.deltas.len() as f64;
+                .sum::<f64>()
+                / state.deltas.len() as f64;
             let stddev = variance.sqrt();
             let jitter = if mean > 0.0 { stddev / mean } else { 1.0 };
 
@@ -459,9 +505,16 @@ impl NetworkIntelCollector {
                 let msg = format!("Beaconing: {} → {}:{}", key.src, key.dst, key.dst_port);
                 let detail = format!(
                     "Regular interval {:.1}s (jitter {:.1}%), {} samples",
-                    mean, jitter * 100.0, state.deltas.len()
+                    mean,
+                    jitter * 100.0,
+                    state.deltas.len()
                 );
-                self.push_alert(AlertSeverity::Warning, AlertCategory::Beaconing, msg, detail);
+                self.push_alert(
+                    AlertSeverity::Warning,
+                    AlertCategory::Beaconing,
+                    msg,
+                    detail,
+                );
             }
         }
     }
@@ -471,14 +524,22 @@ impl NetworkIntelCollector {
         if event.qname.len() > DNS_TUNNEL_QNAME_LEN {
             let msg = format!("Suspicious DNS: long query name ({}b)", event.qname.len());
             let detail = format!("Query: {}", &event.qname[..event.qname.len().min(120)]);
-            self.push_alert(AlertSeverity::Warning, AlertCategory::DnsTunnel, msg, detail);
+            self.push_alert(
+                AlertSeverity::Warning,
+                AlertCategory::DnsTunnel,
+                msg,
+                detail,
+            );
             return;
         }
 
         // Check 2: high rate + many unique subdomains to one base domain
         let base = extract_base_domain(&event.qname);
         if let Some(stats) = self.domain_tunnel_stats.get(&base) {
-            let elapsed = now.duration_since(stats.window_start).as_secs_f64().max(1.0);
+            let elapsed = now
+                .duration_since(stats.window_start)
+                .as_secs_f64()
+                .max(1.0);
             let rate_per_min = stats.count as f64 / elapsed * 60.0;
 
             if rate_per_min > DNS_TUNNEL_QUERY_RATE as f64
@@ -487,14 +548,26 @@ impl NetworkIntelCollector {
                 let msg = format!("DNS tunnel suspect: {}", base);
                 let detail = format!(
                     "{:.0} queries/min, {} unique subdomains",
-                    rate_per_min, stats.unique_prefixes.len()
+                    rate_per_min,
+                    stats.unique_prefixes.len()
                 );
-                self.push_alert(AlertSeverity::Critical, AlertCategory::DnsTunnel, msg, detail);
+                self.push_alert(
+                    AlertSeverity::Critical,
+                    AlertCategory::DnsTunnel,
+                    msg,
+                    detail,
+                );
             }
         }
     }
 
-    fn push_alert(&mut self, severity: AlertSeverity, category: AlertCategory, message: String, detail: String) {
+    fn push_alert(
+        &mut self,
+        severity: AlertSeverity,
+        category: AlertCategory,
+        message: String,
+        detail: String,
+    ) {
         let alert = Alert {
             severity,
             category,
@@ -511,9 +584,12 @@ impl NetworkIntelCollector {
 
     fn prune_stale(&mut self, now: Instant) {
         let stale = Duration::from_secs(STALE_ENTRY_SECS);
-        self.scan_states.retain(|_, v| now.duration_since(v.last_seen) < stale);
-        self.beacon_states.retain(|_, v| now.duration_since(v.last_seen) < stale);
-        self.domain_tunnel_stats.retain(|_, v| now.duration_since(v.window_start) < stale);
+        self.scan_states
+            .retain(|_, v| now.duration_since(v.last_seen) < stale);
+        self.beacon_states
+            .retain(|_, v| now.duration_since(v.last_seen) < stale);
+        self.domain_tunnel_stats
+            .retain(|_, v| now.duration_since(v.window_start) < stale);
 
         // Prune domain counts to top N
         if self.domain_counts.len() > MAX_TRACKED_DOMAINS * 2 {
@@ -571,7 +647,10 @@ mod tests {
             });
         }
         assert_eq!(intel.active_alerts.len(), 1);
-        assert!(matches!(intel.active_alerts[0].category, AlertCategory::PortScan));
+        assert!(matches!(
+            intel.active_alerts[0].category,
+            AlertCategory::PortScan
+        ));
     }
 
     #[test]
@@ -598,7 +677,10 @@ mod tests {
             qname: long_name,
         });
         assert_eq!(intel.active_alerts.len(), 1);
-        assert!(matches!(intel.active_alerts[0].category, AlertCategory::DnsTunnel));
+        assert!(matches!(
+            intel.active_alerts[0].category,
+            AlertCategory::DnsTunnel
+        ));
     }
 
     #[test]
@@ -658,7 +740,10 @@ mod tests {
             });
         }
         assert_eq!(intel.active_alerts.len(), 1);
-        assert!(matches!(intel.active_alerts[0].category, AlertCategory::Bandwidth));
+        assert!(matches!(
+            intel.active_alerts[0].category,
+            AlertCategory::Bandwidth
+        ));
     }
 
     #[test]
@@ -666,13 +751,17 @@ mod tests {
         let mut intel = NetworkIntelCollector::new();
         for _ in 0..10 {
             intel.on_dns_query(DnsQueryEvent {
-                txid: 1, client_ip: "1.1.1.1".into(), server_ip: "8.8.8.8".into(),
+                txid: 1,
+                client_ip: "1.1.1.1".into(),
+                server_ip: "8.8.8.8".into(),
                 qname: "www.example.com".into(),
             });
         }
         for _ in 0..5 {
             intel.on_dns_query(DnsQueryEvent {
-                txid: 2, client_ip: "1.1.1.1".into(), server_ip: "8.8.8.8".into(),
+                txid: 2,
+                client_ip: "1.1.1.1".into(),
+                server_ip: "8.8.8.8".into(),
                 qname: "api.google.com".into(),
             });
         }

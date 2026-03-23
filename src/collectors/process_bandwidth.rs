@@ -20,9 +20,7 @@ pub struct ProcessBandwidthCollector {
 
 impl ProcessBandwidthCollector {
     pub fn new() -> Self {
-        Self {
-            ranked: Vec::new(),
-        }
+        Self { ranked: Vec::new() }
     }
 
     pub fn update(&mut self, connections: &[Connection], interfaces: &[InterfaceTraffic]) {
@@ -158,8 +156,16 @@ mod tests {
         ];
         collector.update(&conns, &[make_interface(1000.0, 500.0)]);
         assert_eq!(collector.ranked().len(), 2);
-        let firefox = collector.ranked().iter().find(|p| p.process_name == "firefox").unwrap();
-        let curl = collector.ranked().iter().find(|p| p.process_name == "curl").unwrap();
+        let firefox = collector
+            .ranked()
+            .iter()
+            .find(|p| p.process_name == "firefox")
+            .unwrap();
+        let curl = collector
+            .ranked()
+            .iter()
+            .find(|p| p.process_name == "curl")
+            .unwrap();
         assert_eq!(firefox.connection_count, 3);
         assert_eq!(curl.connection_count, 1);
         assert!((firefox.rx_rate - 750.0).abs() < 0.01);

@@ -39,10 +39,7 @@ fn collect_stats_powershell() -> Result<HashMap<String, InterfaceStats>> {
     };
 
     for adapter in &adapters {
-        let name = adapter["Name"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
+        let name = adapter["Name"].as_str().unwrap_or_default().to_string();
         if name.is_empty() {
             continue;
         }

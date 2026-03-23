@@ -10,15 +10,15 @@ use tokio::task;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnEvent {
-    pub event_type: u32,    // 0=connect, 1=accept, 2=close, 3=state_change
+    pub event_type: u32, // 0=connect, 1=accept, 2=close, 3=state_change
     pub pid: u32,
     pub tgid: u32,
-    pub af: u16,            // AF_INET or AF_INET6
-    pub protocol: u8,       // IPPROTO_TCP or IPPROTO_UDP
+    pub af: u16,      // AF_INET or AF_INET6
+    pub protocol: u8, // IPPROTO_TCP or IPPROTO_UDP
     pub _pad: u8,
     pub sport: u16,
     pub dport: u16,
-    pub saddr: [u8; 16],    // IPv4 in first 4 bytes, IPv6 full
+    pub saddr: [u8; 16], // IPv4 in first 4 bytes, IPv6 full
     pub daddr: [u8; 16],
     pub old_state: u32,
     pub new_state: u32,

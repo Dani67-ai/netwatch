@@ -100,7 +100,9 @@ fn format_bandwidth(bytes: u64) -> String {
 }
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
-    let popup_width = (area.width * 60 / 100).max(50).min(area.width.saturating_sub(4));
+    let popup_width = (area.width * 60 / 100)
+        .max(50)
+        .min(area.width.saturating_sub(4));
     let popup_height = (SETTINGS_COUNT as u16 + 7).min(area.height.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(popup_width)) / 2;
     let y = area.y + (area.height.saturating_sub(popup_height)) / 2;
@@ -146,7 +148,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         };
 
         let value_style = if is_editing {
-            Style::default().fg(app.theme.text_primary).bg(app.theme.selection_bg)
+            Style::default()
+                .fg(app.theme.text_primary)
+                .bg(app.theme.selection_bg)
         } else if is_selected {
             Style::default().fg(app.theme.text_primary)
         } else {
@@ -155,7 +159,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
         lines.push(Line::from(vec![
             Span::styled(indicator.to_string(), label_style),
-            Span::styled(format!("{:<width$}", row.label, width = label_width), label_style),
+            Span::styled(
+                format!("{:<width$}", row.label, width = label_width),
+                label_style,
+            ),
             Span::styled(value_display, value_style),
         ]));
     }
@@ -255,8 +262,14 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
         }
         1 => {
             let valid = [
-                "dashboard", "connections", "interfaces", "packets",
-                "stats", "topology", "timeline", "insights",
+                "dashboard",
+                "connections",
+                "interfaces",
+                "packets",
+                "stats",
+                "topology",
+                "timeline",
+                "insights",
             ];
             let v = value.to_lowercase();
             if valid.contains(&v.as_str()) {
@@ -320,7 +333,9 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
             Ok(())
         }
         11 => {
-            let v: u64 = value.parse().map_err(|_| "Must be a number (bytes/sec)".to_string())?;
+            let v: u64 = value
+                .parse()
+                .map_err(|_| "Must be a number (bytes/sec)".to_string())?;
             cfg.alerts.bandwidth_threshold = v;
             Ok(())
         }

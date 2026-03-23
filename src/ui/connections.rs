@@ -10,7 +10,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // header
-            Constraint::Min(6),   // connection table
+            Constraint::Min(6),    // connection table
             Constraint::Length(3), // footer
         ])
         .split(area);
@@ -28,14 +28,21 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
     let count = app.connection_collector.connections.lock().unwrap().len();
     let extra = vec![
         Span::raw("  "),
-        Span::styled(format!("{count} connections"), Style::default().fg(app.theme.status_good)),
+        Span::styled(
+            format!("{count} connections"),
+            Style::default().fg(app.theme.status_good),
+        ),
     ];
     crate::ui::widgets::render_header_with_extra(f, app, area, extra);
 }
 
 fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
     let sort_indicator = |col: usize| -> &str {
-        if app.sort_column == col { " ▼" } else { "" }
+        if app.sort_column == col {
+            " ▼"
+        } else {
+            ""
+        }
     };
 
     let mut conns = app.connection_collector.connections.lock().unwrap().clone();
@@ -57,22 +64,15 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
             .style(Style::default().fg(app.theme.brand).bold()),
     ];
     if has_rtt_data {
-        header_cells.push(
-            Cell::from("RTT")
-                .style(Style::default().fg(app.theme.brand).bold()),
-        );
+        header_cells.push(Cell::from("RTT").style(Style::default().fg(app.theme.brand).bold()));
     }
     if has_sparkline_data {
-        header_cells.push(
-            Cell::from("RTT Trend")
-                .style(Style::default().fg(app.theme.brand).bold()),
-        );
+        header_cells
+            .push(Cell::from("RTT Trend").style(Style::default().fg(app.theme.brand).bold()));
     }
     if app.show_geo {
-        header_cells.push(
-            Cell::from("Location")
-                .style(Style::default().fg(app.theme.brand).bold()),
-        );
+        header_cells
+            .push(Cell::from("Location").style(Style::default().fg(app.theme.brand).bold()));
     }
     let header = Row::new(header_cells).height(1);
 
@@ -92,7 +92,9 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let visible_rows = area.height.saturating_sub(3) as usize; // borders + header
-    let scroll = app.connection_scroll.min(conns.len().saturating_sub(visible_rows));
+    let scroll = app
+        .connection_scroll
+        .min(conns.len().saturating_sub(visible_rows));
 
     let rows: Vec<Row> = conns
         .iter()
@@ -153,7 +155,9 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                         let color = rtt_sparkline_color(h, &app.theme);
                         (text, Style::default().fg(color))
                     })
-                    .unwrap_or_else(|| ("—".to_string(), Style::default().fg(app.theme.text_muted)));
+                    .unwrap_or_else(|| {
+                        ("—".to_string(), Style::default().fg(app.theme.text_muted))
+                    });
                 cells.push(Cell::from(spark_text).style(spark_style));
             }
             if app.show_geo {
@@ -191,9 +195,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
     if app.show_geo {
         widths.push(Constraint::Min(20));
     }
-    let table = Table::new(rows, widths)
-    .header(header)
-    .block(
+    let table = Table::new(rows, widths).header(header).block(
         Block::default()
             .title(format!(
                 " Connections [{}-{}] ",
@@ -231,8 +233,12 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
 fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
     let result = app.traceroute_runner.result.lock().unwrap();
 
-    let overlay_width = (area.width * 70 / 100).max(50).min(area.width.saturating_sub(4));
-    let overlay_height = (area.height * 70 / 100).max(10).min(area.height.saturating_sub(4));
+    let overlay_width = (area.width * 70 / 100)
+        .max(50)
+        .min(area.width.saturating_sub(4));
+    let overlay_height = (area.height * 70 / 100)
+        .max(10)
+        .min(area.height.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(overlay_width)) / 2;
     let y = area.y + (area.height.saturating_sub(overlay_height)) / 2;
     let overlay = Rect::new(x, y, overlay_width, overlay_height);
@@ -305,13 +311,20 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = inner.height as usize;
     let max_scroll = lines.len().saturating_sub(visible_height);
     let scroll = app.traceroute_scroll.min(max_scroll);
-    let visible_lines: Vec<Line> = lines.into_iter().skip(scroll).take(visible_height).collect();
+    let visible_lines: Vec<Line> = lines
+        .into_iter()
+        .skip(scroll)
+        .take(visible_height)
+        .collect();
 
     let content = Paragraph::new(visible_lines);
     f.render_widget(content, inner);
 }
 
-fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop, theme: &crate::theme::Theme) -> Line<'static> {
+fn format_hop_line(
+    hop: &crate::collectors::traceroute::TracerouteHop,
+    theme: &crate::theme::Theme,
+) -> Line<'static> {
     let hop_num = format!(" {:>2} ", hop.hop_number);
     let host_ip = match (&hop.host, &hop.ip) {
         (Some(h), Some(ip)) => format!("{} ({})", h, ip),
@@ -331,22 +344,35 @@ fn format_hop_line(hop: &crate::collectors::traceroute::TracerouteHop, theme: &c
             .collect()
     };
 
-    let rtt_color = hop.rtt_ms.iter().filter_map(|r| r.as_ref()).next().map(|ms| {
-        if *ms < 10.0 {
-            theme.status_good
-        } else if *ms < 50.0 {
-            theme.status_warn
-        } else if *ms < 100.0 {
-            Color::Rgb(255, 165, 0)
-        } else {
-            theme.status_error
-        }
-    }).unwrap_or(theme.text_muted);
+    let rtt_color = hop
+        .rtt_ms
+        .iter()
+        .filter_map(|r| r.as_ref())
+        .next()
+        .map(|ms| {
+            if *ms < 10.0 {
+                theme.status_good
+            } else if *ms < 50.0 {
+                theme.status_warn
+            } else if *ms < 100.0 {
+                Color::Rgb(255, 165, 0)
+            } else {
+                theme.status_error
+            }
+        })
+        .unwrap_or(theme.text_muted);
 
     Line::from(vec![
         Span::styled(hop_num, Style::default().fg(theme.brand)),
         Span::raw("  "),
-        Span::styled(format!("{:<40}", host_ip), Style::default().fg(if hop.ip.is_some() { theme.text_primary } else { theme.text_muted })),
+        Span::styled(
+            format!("{:<40}", host_ip),
+            Style::default().fg(if hop.ip.is_some() {
+                theme.text_primary
+            } else {
+                theme.text_muted
+            }),
+        ),
         Span::styled(rtt_spans[0].clone(), Style::default().fg(rtt_color)),
         Span::raw(" "),
         Span::styled(rtt_spans[1].clone(), Style::default().fg(rtt_color)),
@@ -379,7 +405,10 @@ fn rtt_sparkline(history: &std::collections::VecDeque<f64>) -> String {
         .collect()
 }
 
-fn rtt_sparkline_color(history: &std::collections::VecDeque<f64>, theme: &crate::theme::Theme) -> Color {
+fn rtt_sparkline_color(
+    history: &std::collections::VecDeque<f64>,
+    theme: &crate::theme::Theme,
+) -> Color {
     match history.back() {
         Some(&rtt) if rtt > 100.0 => theme.status_error,
         Some(&rtt) if rtt > 50.0 => theme.status_warn,
@@ -472,7 +501,11 @@ fn extract_ip(addr: &str) -> Option<&str> {
         Some(&addr[1..bracket_end])
     } else if let Some(colon) = addr.rfind(':') {
         let ip = &addr[..colon];
-        if ip == "*" { None } else { Some(ip) }
+        if ip == "*" {
+            None
+        } else {
+            Some(ip)
+        }
     } else {
         Some(addr)
     }

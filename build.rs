@@ -79,10 +79,12 @@ mod windows {
 
         let ok = Command::new("powershell")
             .args([
-                "-NoProfile", "-Command",
+                "-NoProfile",
+                "-Command",
                 &format!(
                     "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-                    zip_path.display(), sdk_dir.display()
+                    zip_path.display(),
+                    sdk_dir.display()
                 ),
             ])
             .status()
@@ -104,7 +106,12 @@ mod windows {
         if let Ok(home) = std::env::var("USERPROFILE") {
             let home = PathBuf::from(home);
             paths.push(home.join("npcap-sdk").join("Lib").join(arch));
-            paths.push(home.join("Downloads").join("npcap-sdk").join("Lib").join(arch));
+            paths.push(
+                home.join("Downloads")
+                    .join("npcap-sdk")
+                    .join("Lib")
+                    .join(arch),
+            );
         }
         paths
     }
