@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-pub const SETTINGS_COUNT: usize = 13;
+pub const SETTINGS_COUNT: usize = 12;
 
 struct SettingRow {
     label: &'static str,
@@ -69,10 +69,6 @@ fn build_rows(cfg: &NetwatchConfig) -> Vec<SettingRow> {
             } else {
                 cfg.geoip_asn_db.clone()
             },
-        },
-        SettingRow {
-            label: "Insights Model",
-            value: cfg.insights_model.clone(),
         },
         SettingRow {
             label: "Bandwidth Threshold",
@@ -240,9 +236,8 @@ pub fn get_edit_value(cfg: &NetwatchConfig, cursor: usize) -> String {
         7 => cfg.bpf_filter.clone(),
         8 => cfg.geoip_db.clone(),
         9 => cfg.geoip_asn_db.clone(),
-        10 => cfg.insights_model.clone(),
-        11 => cfg.alerts.bandwidth_threshold.to_string(),
-        12 => cfg.alerts.port_scan_threshold.to_string(),
+        10 => cfg.alerts.bandwidth_threshold.to_string(),
+        11 => cfg.alerts.port_scan_threshold.to_string(),
         _ => String::new(),
     }
 }
@@ -269,7 +264,6 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
                 "stats",
                 "topology",
                 "timeline",
-                "insights",
             ];
             let v = value.to_lowercase();
             if valid.contains(&v.as_str()) {
@@ -329,17 +323,13 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
             Ok(())
         }
         10 => {
-            cfg.insights_model = value.to_string();
-            Ok(())
-        }
-        11 => {
             let v: u64 = value
                 .parse()
                 .map_err(|_| "Must be a number (bytes/sec)".to_string())?;
             cfg.alerts.bandwidth_threshold = v;
             Ok(())
         }
-        12 => {
+        11 => {
             let v: usize = value.parse().map_err(|_| "Must be a number".to_string())?;
             cfg.alerts.port_scan_threshold = v;
             Ok(())
@@ -413,9 +403,9 @@ mod tests {
     #[test]
     fn apply_bandwidth_threshold() {
         let mut cfg = NetwatchConfig::default();
-        assert!(apply_edit(&mut cfg, 11, "50000000").is_ok());
+        assert!(apply_edit(&mut cfg, 10, "50000000").is_ok());
         assert_eq!(cfg.alerts.bandwidth_threshold, 50_000_000);
-        assert!(apply_edit(&mut cfg, 11, "not_a_number").is_err());
+        assert!(apply_edit(&mut cfg, 10, "not_a_number").is_err());
     }
 
     #[test]
@@ -425,8 +415,8 @@ mod tests {
         assert_eq!(cfg.capture_interface, "en1");
         assert!(apply_edit(&mut cfg, 7, "tcp port 80").is_ok());
         assert_eq!(cfg.bpf_filter, "tcp port 80");
-        assert!(apply_edit(&mut cfg, 10, "llama3:8b").is_ok());
-        assert_eq!(cfg.insights_model, "llama3:8b");
+        assert!(apply_edit(&mut cfg, 10, "50000000").is_ok());
+        assert_eq!(cfg.alerts.bandwidth_threshold, 50_000_000);
     }
 
     #[test]
