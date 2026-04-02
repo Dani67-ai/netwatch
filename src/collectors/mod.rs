@@ -2,6 +2,7 @@ pub mod config;
 pub mod connections;
 pub mod geo;
 pub mod health;
+pub mod incident;
 pub mod insights;
 pub mod network_intel;
 pub mod packets;

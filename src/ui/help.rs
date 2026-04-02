@@ -95,6 +95,9 @@ fn build_help_lines() -> Vec<Line<'static>> {
     ));
     lines.push(key_line("p", "Pause/resume data collection"));
     lines.push(key_line("r", "Force refresh all data"));
+    lines.push(key_line("R (shift)", "Arm/disarm flight recorder"));
+    lines.push(key_line("F (shift)", "Freeze the current incident window"));
+    lines.push(key_line("E (shift)", "Export the current incident bundle"));
     lines.push(key_line("?", "Toggle this help overlay"));
     lines.push(key_line("g", "Toggle GeoIP location display"));
     lines.push(key_line(
@@ -138,6 +141,7 @@ fn build_help_lines() -> Vec<Line<'static>> {
     lines.push(key_line("↑↓", "Scroll packet list"));
     lines.push(key_line("Enter", "Select packet at cursor"));
     lines.push(key_line("c", "Start/stop capture"));
+    lines.push(key_line("R/F/E", "Recorder arm, freeze, export incident bundle"));
     lines.push(key_line("i", "Cycle capture interface (when stopped)"));
     lines.push(key_line("b", "Set BPF capture filter (when stopped)"));
     lines.push(key_line("/", "Open display filter bar"));

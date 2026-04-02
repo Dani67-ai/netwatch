@@ -2,8 +2,9 @@ use crate::collectors::config::ConfigCollector;
 use crate::collectors::connections::{Connection, ConnectionCollector, ConnectionTimeline};
 use crate::collectors::geo::GeoCache;
 use crate::collectors::health::HealthProber;
+use crate::collectors::incident::IncidentRecorder;
 use crate::collectors::network_intel::{
-    ConnAttemptEvent, InterfaceRateEvent, NetworkIntelCollector,
+    AlertSeverity, ConnAttemptEvent, InterfaceRateEvent, NetworkIntelCollector,
 };
 use crate::collectors::packets::PacketCollector;
 use crate::collectors::process_bandwidth::ProcessBandwidthCollector;
@@ -20,6 +21,7 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 use ratatui::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::Path;
 
 const RTT_SPARKLINE_SAMPLES: usize = 20;
 
@@ -112,6 +114,7 @@ pub struct App {
     pub bpf_filter_input: bool,
     pub bpf_filter_text: String,
     pub bpf_filter_active: Option<String>,
+    pub incident_recorder: IncidentRecorder,
     pub stats_scroll: usize,
     pub show_help: bool,
     pub help_scroll: usize,
@@ -150,6 +153,7 @@ pub struct App {
     pub settings_edit_buf: String,
     pub settings_status: Option<String>,
     settings_status_tick: u32,
+    incident_capture_started: bool,
 }
 
 impl App {
@@ -207,6 +211,7 @@ impl App {
             bpf_filter_input: false,
             bpf_filter_text: user_config.bpf_filter.clone(),
             bpf_filter_active,
+            incident_recorder: IncidentRecorder::new(),
             stats_scroll: 0,
             show_help: false,
             help_scroll: 0,
@@ -243,6 +248,7 @@ impl App {
             settings_edit_buf: String::new(),
             settings_status: None,
             settings_status_tick: 0,
+            incident_capture_started: false,
         }
     }
 
@@ -289,6 +295,126 @@ impl App {
             None => 0,
         };
         self.capture_interface = ifaces[next_idx].clone();
+    }
+
+    fn arm_incident_recorder(&mut self) {
+        self.incident_recorder.arm();
+        {
+            let packets = self.packet_collector.get_packets();
+            self.incident_recorder.prime_current_packets(&packets);
+        }
+        self.incident_recorder
+            .prime_alert_cursor(self.network_intel.alert_history().len());
+
+        self.incident_capture_started = false;
+        if !self.packet_collector.is_capturing() {
+            let iface = self.capture_interface.clone();
+            let bpf = self.bpf_filter_active.clone();
+            self.packet_collector.start_capture(&iface, bpf.as_deref());
+            self.incident_capture_started = self.packet_collector.is_capturing();
+        }
+
+        self.sync_incident_recorder();
+        self.export_status = Some(format!(
+            "Flight recorder armed ({})",
+            self.incident_recorder.window_label()
+        ));
+        self.export_status_tick = 0;
+    }
+
+    fn disarm_incident_recorder(&mut self) {
+        self.incident_recorder.disarm();
+        if self.incident_capture_started && self.packet_collector.is_capturing() {
+            self.packet_collector.stop_capture();
+        }
+        self.incident_capture_started = false;
+        self.export_status = Some("Flight recorder disarmed".to_string());
+        self.export_status_tick = 0;
+    }
+
+    fn freeze_incident_recorder(&mut self, reason: &str) {
+        if !self.incident_recorder.is_armed() {
+            return;
+        }
+        self.sync_incident_recorder();
+        match self.incident_recorder.freeze(reason) {
+            Ok(()) => {
+                if self.incident_capture_started && self.packet_collector.is_capturing() {
+                    self.packet_collector.stop_capture();
+                }
+                self.incident_capture_started = false;
+                self.export_status = Some(format!("Incident frozen: {reason}"));
+            }
+            Err(err) => {
+                self.export_status = Some(err);
+            }
+        }
+        self.export_status_tick = 0;
+    }
+
+    fn export_incident_bundle(&mut self) {
+        if self.incident_recorder.is_off() {
+            self.export_status = Some("Arm the flight recorder first with Shift+R".to_string());
+            self.export_status_tick = 0;
+            return;
+        }
+
+        if self.incident_recorder.is_armed() {
+            self.freeze_incident_recorder("manual export");
+        }
+
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        match self.incident_recorder.export_bundle(Path::new(&home)) {
+            Ok(path) => {
+                self.export_status = Some(format!(
+                    "Incident bundle saved to {}",
+                    path.display()
+                ));
+            }
+            Err(err) => {
+                self.export_status = Some(format!("Incident export failed: {err}"));
+            }
+        }
+        self.export_status_tick = 0;
+    }
+
+    fn sync_incident_recorder(&mut self) {
+        if !self.incident_recorder.is_armed() {
+            return;
+        }
+
+        let connections = self.connection_collector.connections.lock().unwrap().clone();
+        let health = self.health_prober.status.lock().unwrap();
+        let packets = self.packet_collector.get_packets();
+        let dns = self.network_intel.dns_analytics();
+        let alert_history: Vec<_> = self.network_intel.alert_history().iter().cloned().collect();
+
+        self.incident_recorder.record(
+            &packets,
+            &connections,
+            &health,
+            &self.traffic.interfaces,
+            self.process_bandwidth.ranked(),
+            &dns,
+            &alert_history,
+        );
+    }
+
+    fn auto_freeze_reason(&self) -> Option<String> {
+        if !self.incident_recorder.is_armed() {
+            return None;
+        }
+
+        self.network_intel
+            .active_alerts()
+            .iter()
+            .find(|alert| matches!(alert.severity, AlertSeverity::Critical))
+            .map(|alert| {
+                format!(
+                    "critical {} alert",
+                    alert.category.label().to_lowercase()
+                )
+            })
     }
 
     fn tick(&mut self) {
@@ -372,6 +498,11 @@ impl App {
 
         // Tick network intel (housekeeping)
         self.network_intel.tick();
+
+        self.sync_incident_recorder();
+        if let Some(reason) = self.auto_freeze_reason() {
+            self.freeze_incident_recorder(&reason);
+        }
 
         // Refresh health every ~5 ticks (5s)
         self.health_tick += 1;
@@ -757,6 +888,23 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                         let gateway = app.config_collector.config.gateway.clone();
                         let dns = app.config_collector.config.dns_servers.first().cloned();
                         app.health_prober.probe(gateway.as_deref(), dns.as_deref());
+                    }
+                    KeyCode::Char('R') => match app.incident_recorder.state() {
+                        crate::collectors::incident::RecorderState::Off => {
+                            app.arm_incident_recorder();
+                        }
+                        crate::collectors::incident::RecorderState::Armed => {
+                            app.disarm_incident_recorder();
+                        }
+                        crate::collectors::incident::RecorderState::Frozen => {
+                            app.arm_incident_recorder();
+                        }
+                    },
+                    KeyCode::Char('F') => {
+                        app.freeze_incident_recorder("manual freeze");
+                    }
+                    KeyCode::Char('E') => {
+                        app.export_incident_bundle();
                     }
                     KeyCode::Char('1') => app.current_tab = Tab::Dashboard,
                     KeyCode::Char('2') => app.current_tab = Tab::Connections,

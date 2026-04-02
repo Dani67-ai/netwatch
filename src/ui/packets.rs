@@ -59,7 +59,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
     }
 
     if let Some(e) = app.packet_collector.get_error() {
-        let line1 = build_packets_header_line(app, extra);
+        let line1 = crate::ui::widgets::build_header_line(app, Some(extra));
         let lines = vec![
             line1,
             Line::from(vec![
@@ -74,7 +74,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
         );
         f.render_widget(header, area);
     } else if let Some(ref status) = app.export_status {
-        let line1 = build_packets_header_line(app, extra);
+        let line1 = crate::ui::widgets::build_header_line(app, Some(extra));
         let lines = vec![
             line1,
             Line::from(vec![
@@ -94,55 +94,6 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, pkt_count: usize) {
     } else {
         crate::ui::widgets::render_header_with_extra(f, app, area, extra);
     }
-}
-
-fn build_packets_header_line(app: &App, extra: Vec<Span<'static>>) -> Line<'static> {
-    use crate::app::Tab;
-    let now = chrono::Local::now().format("%H:%M:%S").to_string();
-    let tabs: &[(&str, &str, Tab)] = &[
-        ("1", "Dashboard", Tab::Dashboard),
-        ("2", "Connections", Tab::Connections),
-        ("3", "Interfaces", Tab::Interfaces),
-        ("4", "Packets", Tab::Packets),
-        ("5", "Stats", Tab::Stats),
-        ("6", "Topology", Tab::Topology),
-        ("7", "Timeline", Tab::Timeline),
-    ];
-    let mut spans: Vec<Span<'static>> = vec![Span::styled(
-        "◉ NetWatch ",
-        Style::default().fg(app.theme.brand).bold(),
-    )];
-    for (i, (num, name, tab)) in tabs.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(" │ ", Style::default().fg(app.theme.border)));
-        }
-        let label = format!("[{}] {}", num, name);
-        if *tab == app.current_tab {
-            spans.push(Span::styled(
-                label,
-                Style::default().fg(app.theme.active_tab).bold(),
-            ));
-        } else {
-            spans.push(Span::styled(
-                label,
-                Style::default().fg(app.theme.text_muted),
-            ));
-        }
-    }
-    if app.paused {
-        spans.push(Span::styled(
-            " ⏸ PAUSED ",
-            Style::default()
-                .fg(app.theme.text_inverse)
-                .bg(app.theme.key_hint),
-        ));
-    }
-    for s in extra {
-        spans.push(s);
-    }
-    spans.push(Span::raw("  "));
-    spans.push(Span::styled(now, Style::default().fg(app.theme.text_muted)));
-    Line::from(spans)
 }
 
 fn truncate_info(s: &str, max: usize) -> String {

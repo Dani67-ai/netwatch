@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <em>Launch → see every interface, connection, and health probe instantly. No setup required.</em>
+  <em>Launch → see every interface, connection, and health probe instantly. Arm the flight recorder before an incident disappears.</em>
 </p>
 
 ---
@@ -62,6 +62,18 @@ netwatch            # Interface stats, connections, config
 sudo netwatch       # Full mode — adds health probes + packet capture
 ```
 
+### Flight Recorder
+
+Catch transient failures that vanish before you can inspect them:
+
+```text
+Shift+R   Arm a rolling 5-minute recorder
+Shift+F   Freeze the current incident window
+Shift+E   Export an incident bundle to ~/netwatch_incident_YYYYMMDD_HHMMSS/
+```
+
+Each bundle includes `summary.md`, `packets.pcap`, `connections.json`, `health.json`, `bandwidth.json`, `dns.json`, `alerts.json`, and `manifest.json`.
+
 ---
 
 ## Why NetWatch?
@@ -74,6 +86,7 @@ Most network tools make you choose: **see what's happening** (iftop, bandwhich) 
 | Every connection with process name + PID | **Instant** |
 | Gateway & DNS health with latency heatmap | **Instant** |
 | Wireshark-style packet capture + decode | One keypress |
+| Rolling incident capture + frozen export bundle | One keypress |
 | Network topology map with traceroute | One keypress |
 | PCAP export for offline analysis | One keypress |
 
@@ -110,6 +123,9 @@ Per-interface detail: IPv4/IPv6 addresses, MAC, MTU, total RX/TX with individual
 ### 📦 Packet Capture
 Live capture with deep protocol decoding — **DNS** (queries, types, response codes), **TLS** (version, SNI), **HTTP** (method, path, status), **ICMP**, **ARP**, **DHCP**, **NTP**, **mDNS**, and 25+ service labels. TCP stream reassembly, handshake timing, display filters, BPF capture filters, bookmarks, and PCAP export.
 
+### 🎥 Flight Recorder
+Arm a rolling 5-minute capture window, then freeze it manually or when a critical network-intel alert fires. Export a self-contained incident bundle with a human-readable summary, `.pcap`, connection/process context, health samples, DNS analytics, and alert history.
+
 ### 🗺️ Topology
 ASCII network map showing your machine, gateway, DNS servers, and top remote hosts with connection counts and color-coded health indicators. Built-in **traceroute** from any host.
 
@@ -143,10 +159,13 @@ google                     # Bare word → contains "google"
 
 | Key | Action |
 |-----|--------|
-| `1`–`7` | Switch tabs |
+| `1`–`8` | Switch tabs |
 | `↑` `↓` | Navigate |
 | `p` | Pause / resume |
 | `r` | Force refresh |
+| `R` | Arm / reset flight recorder |
+| `F` | Freeze current incident window |
+| `E` | Export incident bundle |
 | `/` | Filter (Packets) |
 | `c` | Start/stop capture (Packets) |
 | `s` | Sort / stream view |
@@ -174,6 +193,9 @@ google                     # Bare word → contains "google"
 | Key | Action |
 |-----|--------|
 | `c` | Start/stop capture |
+| `R` | Arm / disarm flight recorder |
+| `F` | Freeze incident window |
+| `E` | Export incident bundle |
 | `i` | Cycle capture interface |
 | `b` | Set BPF capture filter |
 | `/` | Display filter |
@@ -204,6 +226,26 @@ google                     # Bare word → contains "google"
 | `Enter` | Jump to Connections |
 
 </details>
+
+---
+
+## Incident Bundle
+
+When the Flight Recorder is armed, NetWatch keeps a bounded rolling window of evidence. On freeze or export, it writes:
+
+```text
+netwatch_incident_20260403_103501/
+  summary.md
+  manifest.json
+  packets.pcap
+  connections.json
+  health.json
+  bandwidth.json
+  dns.json
+  alerts.json
+```
+
+This makes bug reports, incident reviews, and demos much easier: you keep the packet evidence and the operational context that explains it.
 
 ---
 

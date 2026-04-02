@@ -1,4 +1,5 @@
 use crate::app::{App, Tab};
+use crate::collectors::incident::RecorderState;
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Paragraph},
@@ -52,7 +53,7 @@ fn tab_label(tab: Tab) -> (&'static str, &'static str) {
     }
 }
 
-fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'static> {
+pub fn build_header_line(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'static> {
     let t = &app.theme;
     let now = chrono::Local::now().format("%H:%M:%S").to_string();
 
@@ -92,6 +93,32 @@ fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'sta
         ));
     }
 
+    match app.incident_recorder.state() {
+        RecorderState::Armed => {
+            spans.push(Span::styled(
+                format!(" REC {} ", app.incident_recorder.window_label()),
+                Style::default().fg(t.text_inverse).bg(t.brand),
+            ));
+        }
+        RecorderState::Frozen => {
+            spans.push(Span::styled(
+                " FROZEN ",
+                Style::default().fg(t.text_inverse).bg(t.status_warn),
+            ));
+        }
+        RecorderState::Off => {}
+    }
+
+    if app.current_tab != Tab::Packets {
+        if let Some(status) = &app.export_status {
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled(
+                truncate_inline(status, 56),
+                Style::default().fg(t.status_good),
+            ));
+        }
+    }
+
     if let Some(extra_spans) = extra {
         for s in extra_spans {
             spans.push(s);
@@ -104,8 +131,18 @@ fn build_header_spans(app: &App, extra: Option<Vec<Span<'static>>>) -> Line<'sta
     Line::from(spans)
 }
 
+fn truncate_inline(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+
+    let mut truncated: String = text.chars().take(max_chars.saturating_sub(1)).collect();
+    truncated.push('…');
+    truncated
+}
+
 pub fn render_header(f: &mut Frame, app: &App, area: Rect) {
-    let line = build_header_spans(app, None);
+    let line = build_header_line(app, None);
     let header = Paragraph::new(line).block(
         Block::default()
             .borders(Borders::BOTTOM)
@@ -115,7 +152,7 @@ pub fn render_header(f: &mut Frame, app: &App, area: Rect) {
 }
 
 pub fn render_header_with_extra(f: &mut Frame, app: &App, area: Rect, extra: Vec<Span<'static>>) {
-    let line = build_header_spans(app, Some(extra));
+    let line = build_header_line(app, Some(extra));
     let header = Paragraph::new(line).block(
         Block::default()
             .borders(Borders::BOTTOM)
@@ -221,6 +258,9 @@ pub fn render_footer(f: &mut Frame, app: &App, area: Rect, context_hints: Vec<Sp
     }
 
     let standard_hints: &[(&str, &str)] = &[
+        ("R", "Rec"),
+        ("F", "Freeze"),
+        ("E", "Export"),
         ("q", "Quit"),
         ("↑↓", "Scroll"),
         ("1-8", "Tab"),

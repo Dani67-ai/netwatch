@@ -1,9 +1,10 @@
+use serde::Serialize;
 use std::collections::HashMap;
 
 use super::connections::Connection;
 use super::traffic::InterfaceTraffic;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProcessBandwidth {
     pub process_name: String,
     pub pid: Option<u32>,
