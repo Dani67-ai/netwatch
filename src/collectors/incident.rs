@@ -262,18 +262,25 @@ impl IncidentRecorder {
             &dir.join("connections.json"),
             &snapshot_values(&self.connection_snapshots),
         )?;
-        write_json(&dir.join("health.json"), &snapshot_values(&self.health_snapshots))?;
+        write_json(
+            &dir.join("health.json"),
+            &snapshot_values(&self.health_snapshots),
+        )?;
         write_json(
             &dir.join("bandwidth.json"),
             &snapshot_values(&self.bandwidth_snapshots),
         )?;
         write_json(&dir.join("dns.json"), &snapshot_values(&self.dns_snapshots))?;
-        write_json(&dir.join("alerts.json"), &snapshot_values(&self.alert_events))?;
+        write_json(
+            &dir.join("alerts.json"),
+            &snapshot_values(&self.alert_events),
+        )?;
         fs::write(dir.join("summary.md"), self.build_summary())
             .map_err(|e| format!("Failed to write summary.md: {e}"))?;
 
         if !self.packets.is_empty() {
-            let packets: Vec<CapturedPacket> = self.packets.iter().map(|p| p.packet.clone()).collect();
+            let packets: Vec<CapturedPacket> =
+                self.packets.iter().map(|p| p.packet.clone()).collect();
             let pcap_path = dir.join("packets.pcap");
             export_pcap(&packets, &pcap_path.to_string_lossy())
                 .map_err(|e| format!("Failed to write packets.pcap: {e}"))?;
@@ -385,9 +392,13 @@ impl IncidentRecorder {
     fn prune(&mut self, now: DateTime<Utc>) {
         let cutoff = now - self.window;
         prune_queue(&mut self.packets, cutoff, |item| item.observed_at);
-        prune_queue(&mut self.connection_snapshots, cutoff, |item| item.observed_at);
+        prune_queue(&mut self.connection_snapshots, cutoff, |item| {
+            item.observed_at
+        });
         prune_queue(&mut self.health_snapshots, cutoff, |item| item.observed_at);
-        prune_queue(&mut self.bandwidth_snapshots, cutoff, |item| item.observed_at);
+        prune_queue(&mut self.bandwidth_snapshots, cutoff, |item| {
+            item.observed_at
+        });
         prune_queue(&mut self.dns_snapshots, cutoff, |item| item.observed_at);
         prune_queue(&mut self.alert_events, cutoff, |item| item.observed_at);
     }
@@ -400,7 +411,9 @@ impl IncidentRecorder {
         let mut warning_count = 0usize;
 
         for packet in &self.packets {
-            *protocol_counts.entry(packet.packet.protocol.clone()).or_insert(0) += 1;
+            *protocol_counts
+                .entry(packet.packet.protocol.clone())
+                .or_insert(0) += 1;
             match packet.packet.expert {
                 ExpertSeverity::Error => error_count += 1,
                 ExpertSeverity::Warn => warning_count += 1,
@@ -628,8 +641,8 @@ fn alert_severity_label(alert: &Alert) -> String {
 }
 
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    let file = fs::File::create(path)
-        .map_err(|e| format!("Failed to create {}: {e}", path.display()))?;
+    let file =
+        fs::File::create(path).map_err(|e| format!("Failed to create {}: {e}", path.display()))?;
     serde_json::to_writer_pretty(file, value)
         .map_err(|e| format!("Failed to write {}: {e}", path.display()))
 }
@@ -770,10 +783,8 @@ mod tests {
         );
         recorder.freeze("manual freeze").unwrap();
 
-        let root = std::env::temp_dir().join(format!(
-            "netwatch_incident_test_{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("netwatch_incident_test_{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
 

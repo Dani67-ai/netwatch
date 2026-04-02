@@ -366,10 +366,7 @@ impl App {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         match self.incident_recorder.export_bundle(Path::new(&home)) {
             Ok(path) => {
-                self.export_status = Some(format!(
-                    "Incident bundle saved to {}",
-                    path.display()
-                ));
+                self.export_status = Some(format!("Incident bundle saved to {}", path.display()));
             }
             Err(err) => {
                 self.export_status = Some(format!("Incident export failed: {err}"));
@@ -383,7 +380,12 @@ impl App {
             return;
         }
 
-        let connections = self.connection_collector.connections.lock().unwrap().clone();
+        let connections = self
+            .connection_collector
+            .connections
+            .lock()
+            .unwrap()
+            .clone();
         let health = self.health_prober.status.lock().unwrap();
         let packets = self.packet_collector.get_packets();
         let dns = self.network_intel.dns_analytics();
@@ -409,12 +411,7 @@ impl App {
             .active_alerts()
             .iter()
             .find(|alert| matches!(alert.severity, AlertSeverity::Critical))
-            .map(|alert| {
-                format!(
-                    "critical {} alert",
-                    alert.category.label().to_lowercase()
-                )
-            })
+            .map(|alert| format!("critical {} alert", alert.category.label().to_lowercase()))
     }
 
     fn tick(&mut self) {
