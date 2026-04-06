@@ -292,22 +292,6 @@ Raw bytes → Ethernet → IPv4/IPv6/ARP → TCP/UDP/ICMP → DNS/TLS/HTTP/DHCP/
 
 ---
 
-## Cloud Monitoring
-
-Need to monitor servers remotely? [**NetWatch Cloud**](https://github.com/matthart1983/netwatch-cloud) extends NetWatch with:
-
-- 🚀 Lightweight agent daemon (5MB, no root required)
-- 📊 Web dashboard with real-time charts
-- 🔔 Email + Slack alerts (host offline, packet loss, latency)
-- 📈 Historical metrics with 72h retention
-
-```bash
-# One-command agent setup
-netwatch-agent setup
-```
-
----
-
 ## Contributing
 
 Contributions welcome! Fork, branch, PR. See [CONTRIBUTING.md](CONTRIBUTING.md).
