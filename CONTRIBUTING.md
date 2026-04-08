@@ -34,6 +34,22 @@ Background threads that run external commands (connections, health probes) use a
 - Prefer `Arc<Mutex<T>>` for shared mutable state between threads
 - Prefer `Arc<AtomicBool>` for simple flags
 
+## Documentation
+
+- Keep `README.md`, `WIKI.md`, and `CHANGELOG.md` aligned with the current app behavior
+- When a planning note, audit, or one-off review stops being maintained, remove it instead of leaving stale Markdown in the repo
+- Do not document features as shipped until they are reachable in the current UI or CLI
+
+## Local Verification
+
+Run the standard Rust checks before opening a PR:
+
+```bash
+cargo fmt --check
+cargo clippy --all-targets
+cargo test
+```
+
 ## Security
 
 - Never use shell expansion or `sh -c` — always `Command::new("binary").args([...])`

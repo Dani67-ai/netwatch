@@ -60,6 +60,7 @@ cargo build --release
 ```bash
 netwatch            # Interface stats, connections, config
 sudo netwatch       # Full mode — adds health probes + packet capture
+netwatch --generate-config
 ```
 
 ### Flight Recorder
@@ -72,7 +73,7 @@ Shift+F   Freeze the current incident window
 Shift+E   Export an incident bundle to ~/netwatch_incident_YYYYMMDD_HHMMSS/
 ```
 
-Each bundle includes `summary.md`, `packets.pcap`, `connections.json`, `health.json`, `bandwidth.json`, `dns.json`, `alerts.json`, and `manifest.json`.
+Each bundle includes `summary.md`, `connections.json`, `health.json`, `bandwidth.json`, `dns.json`, `alerts.json`, `manifest.json`, and `packets.pcap` when capture data is available.
 
 ---
 
@@ -123,6 +124,9 @@ Per-interface detail: IPv4/IPv6 addresses, MAC, MTU, total RX/TX with individual
 ### 📦 Packet Capture
 Live capture with deep protocol decoding — **DNS** (queries, types, response codes), **TLS** (version, SNI), **HTTP** (method, path, status), **ICMP**, **ARP**, **DHCP**, **NTP**, **mDNS**, and 25+ service labels. TCP stream reassembly, handshake timing, display filters, BPF capture filters, bookmarks, and PCAP export.
 
+### 📈 Processes
+Per-process bandwidth ranking with live RX/TX rates, totals, and connection counts. Useful for spotting the process behind a noisy host or bandwidth spike.
+
 ### 🎥 Flight Recorder
 Arm a rolling 5-minute capture window, then freeze it manually or when a critical network-intel alert fires. Export a self-contained incident bundle with a human-readable summary, `.pcap`, connection/process context, health samples, DNS analytics, and alert history.
 
@@ -133,7 +137,10 @@ ASCII network map showing your machine, gateway, DNS servers, and top remote hos
 Protocol hierarchy table with packet counts, byte totals, and distribution bars. TCP handshake histogram with min/avg/median/p95/max.
 
 ### ⏱️ Timeline
-Gantt-style connection timeline — when each connection was active, color-coded by TCP state. Adjustable windows from 30 seconds to 1 hour.
+Gantt-style connection timeline — when each connection was active, color-coded by TCP state. Adjustable windows from 1 minute to 1 hour.
+
+### ⚙️ Settings
+Built-in settings overlay for theme, default tab, refresh rate, capture interface, packet-follow mode, GeoIP paths, BPF filter, and alert thresholds. Use `,` to open it and `S` to persist changes.
 
 ---
 
@@ -187,6 +194,7 @@ google                     # Bare word → contains "google"
 | `Enter` | Jump to Packets with connection filter |
 | `T` | Traceroute to remote IP |
 | `W` | Whois lookup |
+| `e` | Export connections to JSON + CSV |
 | `g` | Toggle GeoIP column |
 
 ### Packets
@@ -201,9 +209,11 @@ google                     # Bare word → contains "google"
 | `/` | Display filter |
 | `s` | Stream view |
 | `w` | Export .pcap |
+| `x` | Clear packets |
 | `m` | Bookmark packet |
 | `n`/`N` | Next/prev bookmark |
 | `f` | Auto-follow |
+| `W` | Whois lookup for selected packet IPs |
 
 ### Stream View
 | Key | Action |
@@ -218,12 +228,28 @@ google                     # Bare word → contains "google"
 |-----|--------|
 | `T` | Traceroute to selected host |
 | `Enter` | Jump to Connections for host |
+| `Esc` | Close traceroute overlay |
 
 ### Timeline
 | Key | Action |
 |-----|--------|
-| `t` | Cycle time window (30s–1h) |
+| `t` | Cycle time window (1m–1h) |
 | `Enter` | Jump to Connections |
+
+### Processes
+| Key | Action |
+|-----|--------|
+| `↑` `↓` | Navigate |
+| `e` | Export connections to JSON + CSV |
+
+### Settings
+| Key | Action |
+|-----|--------|
+| `↑` `↓` | Navigate settings |
+| `Enter` | Edit selected setting |
+| `←` `→` | Cycle theme |
+| `S` | Save config |
+| `Esc` | Close |
 
 </details>
 
@@ -237,12 +263,12 @@ When the Flight Recorder is armed, NetWatch keeps a bounded rolling window of ev
 netwatch_incident_20260403_103501/
   summary.md
   manifest.json
-  packets.pcap
   connections.json
   health.json
   bandwidth.json
   dns.json
   alerts.json
+  packets.pcap   # present when packets were captured
 ```
 
 This makes bug reports, incident reviews, and demos much easier: you keep the packet evidence and the operational context that explains it.
@@ -269,7 +295,19 @@ Degrades gracefully — features that need root show a clear message, never cras
 
 **Dark** (default) · **Light** · **Solarized** · **Dracula** · **Nord**
 
-All preferences persist to a TOML config file automatically.
+Theme changes apply immediately. Persist them from the Settings overlay with `S`.
+
+---
+
+## Configuration
+
+NetWatch runs well with zero setup, but you can persist preferences for theme, default tab, refresh rate, capture interface, GeoIP database paths, packet-follow behavior, BPF filter, and alert thresholds.
+
+```bash
+netwatch --generate-config
+```
+
+That writes a starter config file to your platform config directory. You can also edit settings live in the app with `,` and save with `S`.
 
 ---
 
@@ -294,7 +332,7 @@ Raw bytes → Ethernet → IPv4/IPv6/ARP → TCP/UDP/ICMP → DNS/TLS/HTTP/DHCP/
 
 ## Contributing
 
-Contributions welcome! Fork, branch, PR. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions and [WIKI.md](WIKI.md) for a current architecture guide.
 
 ## License
 

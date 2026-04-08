@@ -187,7 +187,7 @@ fn build_help_lines() -> Vec<Line<'static>> {
     // TIMELINE
     lines.push(section_header("TIMELINE (Tab 7)"));
     lines.push(key_line("↑↓", "Scroll connection list"));
-    lines.push(key_line("t", "Cycle time window (30s/1m/5m/15m/1h)"));
+    lines.push(key_line("t", "Cycle time window (1m/5m/15m/30m/1h)"));
     lines.push(key_line("Enter", "Jump to Connections tab"));
     lines.push(Line::raw(""));
 
