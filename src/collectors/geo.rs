@@ -113,6 +113,12 @@ pub struct GeoCache {
     online_tx: std_mpsc::Sender<String>,
 }
 
+impl Default for GeoCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GeoCache {
     pub fn new() -> Self {
         Self::with_mmdb("", "")

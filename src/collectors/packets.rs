@@ -116,14 +116,13 @@ pub fn classify_expert(protocol: &str, info: &str, tcp_flags: Option<u8>) -> Exp
     }
 
     // HTTP errors
-    if protocol == "HTTP" {
-        if info.contains("HTTP/1.1 4")
+    if protocol == "HTTP"
+        && (info.contains("HTTP/1.1 4")
             || info.contains("HTTP/1.1 5")
             || info.contains("HTTP/1.0 4")
-            || info.contains("HTTP/1.0 5")
-        {
-            return ExpertSeverity::Warn;
-        }
+            || info.contains("HTTP/1.0 5"))
+    {
+        return ExpertSeverity::Warn;
     }
 
     ExpertSeverity::Chat
@@ -135,12 +134,26 @@ pub struct DnsCache {
     tx: std_mpsc::Sender<String>,
 }
 
+/// Per-IP resolution state in `DnsCache`.
+///
+/// Transitions:
+///   None → Pending   (first lookup: request queued to resolver thread)
+///   Pending → Resolved | Failed  (resolver thread writes result back)
+///
+/// `Pending` entries carry the time they were inserted so stale ones can be
+/// retried after `DNS_PENDING_TIMEOUT`. Without a timeout, a stalled resolver
+/// thread would leave entries stuck as `Pending` forever.
 #[derive(Clone, Debug)]
 enum DnsEntry {
     Resolved(String),
     Failed,
-    Pending,
+    /// Lookup in flight. `queued_at` is used to expire stale pending entries.
+    Pending {
+        queued_at: std::time::Instant,
+    },
 }
+
+const DNS_PENDING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl DnsCache {
     fn new() -> Self {
@@ -176,14 +189,25 @@ impl DnsCache {
         }
         let mut cache = self.cache.lock().unwrap();
         match cache.get(ip) {
-            Some(DnsEntry::Resolved(name)) => Some(name.clone()),
-            Some(DnsEntry::Failed) | Some(DnsEntry::Pending) => None,
-            None => {
-                cache.insert(ip.to_string(), DnsEntry::Pending);
-                let _ = self.tx.send(ip.to_string());
-                None
+            Some(DnsEntry::Resolved(name)) => return Some(name.clone()),
+            Some(DnsEntry::Failed) => return None,
+            Some(DnsEntry::Pending { queued_at }) => {
+                // Still waiting — unless the entry has expired
+                if queued_at.elapsed() < DNS_PENDING_TIMEOUT {
+                    return None;
+                }
+                // Timed out: fall through to re-queue below
             }
+            None => {}
         }
+        cache.insert(
+            ip.to_string(),
+            DnsEntry::Pending {
+                queued_at: std::time::Instant::now(),
+            },
+        );
+        let _ = self.tx.send(ip.to_string());
+        None
     }
 }
 
@@ -282,6 +306,12 @@ pub struct StreamTracker {
     streams: HashMap<StreamKey, u32>,
     pub all_streams: Vec<Stream>,
     next_index: u32,
+}
+
+impl Default for StreamTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamTracker {
@@ -458,6 +488,12 @@ pub struct PacketCollector {
     pub stream_tracker: Arc<Mutex<StreamTracker>>,
     counter: Arc<Mutex<u64>>,
     handle: Option<thread::JoinHandle<()>>,
+}
+
+impl Default for PacketCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PacketCollector {
@@ -1278,11 +1314,11 @@ fn parse_tls(data: &[u8]) -> Option<(String, String)> {
         )),
         14 => Some((
             "Server Hello Done".into(),
-            format!("TLS: Server Hello Done"),
+            "TLS: Server Hello Done".to_string(),
         )),
         16 => Some((
             "Client Key Exchange".into(),
-            format!("TLS: Client Key Exchange"),
+            "TLS: Client Key Exchange".to_string(),
         )),
         _ => {
             let info = format!("Handshake type {}", handshake_type);
@@ -2122,7 +2158,7 @@ fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
-fn parse_or<'a>(tokens: &'a [String], depth: usize) -> Option<(FilterExpr, &'a [String])> {
+fn parse_or(tokens: &[String], depth: usize) -> Option<(FilterExpr, &[String])> {
     if depth > MAX_FILTER_DEPTH {
         return None;
     }
@@ -2135,7 +2171,7 @@ fn parse_or<'a>(tokens: &'a [String], depth: usize) -> Option<(FilterExpr, &'a [
     Some((left, rest))
 }
 
-fn parse_and<'a>(tokens: &'a [String], depth: usize) -> Option<(FilterExpr, &'a [String])> {
+fn parse_and(tokens: &[String], depth: usize) -> Option<(FilterExpr, &[String])> {
     if depth > MAX_FILTER_DEPTH {
         return None;
     }
@@ -2148,7 +2184,7 @@ fn parse_and<'a>(tokens: &'a [String], depth: usize) -> Option<(FilterExpr, &'a 
     Some((left, rest))
 }
 
-fn parse_not<'a>(tokens: &'a [String], depth: usize) -> Option<(FilterExpr, &'a [String])> {
+fn parse_not(tokens: &[String], depth: usize) -> Option<(FilterExpr, &[String])> {
     if depth > MAX_FILTER_DEPTH {
         return None;
     }
@@ -2162,7 +2198,7 @@ fn parse_not<'a>(tokens: &'a [String], depth: usize) -> Option<(FilterExpr, &'a 
     parse_atom(tokens)
 }
 
-fn parse_atom<'a>(tokens: &'a [String]) -> Option<(FilterExpr, &'a [String])> {
+fn parse_atom(tokens: &[String]) -> Option<(FilterExpr, &[String])> {
     if tokens.is_empty() {
         return None;
     }
@@ -2236,11 +2272,11 @@ pub fn matches_packet(expr: &FilterExpr, pkt: &CapturedPacket) -> bool {
                 || pkt
                     .src_host
                     .as_ref()
-                    .map_or(false, |h| h.to_lowercase().contains(s))
+                    .is_some_and(|h| h.to_lowercase().contains(s))
                 || pkt
                     .dst_host
                     .as_ref()
-                    .map_or(false, |h| h.to_lowercase().contains(s))
+                    .is_some_and(|h| h.to_lowercase().contains(s))
         }
         FilterExpr::Not(inner) => !matches_packet(inner, pkt),
         FilterExpr::And(a, b) => matches_packet(a, pkt) && matches_packet(b, pkt),
@@ -2255,7 +2291,7 @@ pub fn matches_packet(expr: &FilterExpr, pkt: &CapturedPacket) -> bool {
 fn resolve_device_name(friendly: &str) -> String {
     #[cfg(not(target_os = "windows"))]
     {
-        return friendly.to_string();
+        friendly.to_string()
     }
 
     #[cfg(target_os = "windows")]

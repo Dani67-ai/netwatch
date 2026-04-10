@@ -100,6 +100,12 @@ pub struct RttMonitor {
 }
 
 #[allow(dead_code)]
+impl Default for RttMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RttMonitor {
     pub fn new() -> Self {
         Self {

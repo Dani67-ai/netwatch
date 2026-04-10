@@ -5,6 +5,30 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+/// Standard 3-chunk vertical layout used by most tabs: header / content / footer.
+/// Each panel is 3 rows tall; content takes whatever remains.
+pub struct FrameChunks {
+    pub header: Rect,
+    pub content: Rect,
+    pub footer: Rect,
+}
+
+pub fn frame_layout(area: Rect) -> FrameChunks {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(3),
+        ])
+        .split(area);
+    FrameChunks {
+        header: chunks[0],
+        content: chunks[1],
+        footer: chunks[2],
+    }
+}
+
 pub fn format_bytes_rate(bytes_per_sec: f64) -> String {
     if bytes_per_sec >= 1_000_000_000.0 {
         format!("{:.1} GB/s", bytes_per_sec / 1_000_000_000.0)
@@ -191,6 +215,46 @@ pub fn tab_at_column(col: u16, insights_enabled: bool) -> Option<Tab> {
     None
 }
 
+pub fn render_footer(f: &mut Frame, app: &App, area: Rect, context_hints: Vec<Span<'static>>) {
+    let t = &app.theme;
+    let mut spans: Vec<Span<'static>> = vec![Span::raw(" ")];
+
+    for s in context_hints {
+        spans.push(s);
+    }
+
+    if spans.len() > 1 {
+        spans.push(Span::raw("  "));
+    }
+
+    let standard_hints: &[(&str, &str)] = &[
+        ("R", "Rec"),
+        ("F", "Freeze"),
+        ("E", "Export"),
+        ("q", "Quit"),
+        ("↑↓", "Scroll"),
+        ("1-8", "Tab"),
+        ("?", "Help"),
+    ];
+    for (i, (key, desc)) in standard_hints.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw("  "));
+        }
+        spans.push(Span::styled(
+            key.to_string(),
+            Style::default().fg(t.key_hint).bold(),
+        ));
+        spans.push(Span::raw(format!(":{}", desc)));
+    }
+
+    let footer = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(t.border)),
+    );
+    f.render_widget(footer, area);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,44 +325,4 @@ mod tests {
             );
         }
     }
-}
-
-pub fn render_footer(f: &mut Frame, app: &App, area: Rect, context_hints: Vec<Span<'static>>) {
-    let t = &app.theme;
-    let mut spans: Vec<Span<'static>> = vec![Span::raw(" ")];
-
-    for s in context_hints {
-        spans.push(s);
-    }
-
-    if spans.len() > 1 {
-        spans.push(Span::raw("  "));
-    }
-
-    let standard_hints: &[(&str, &str)] = &[
-        ("R", "Rec"),
-        ("F", "Freeze"),
-        ("E", "Export"),
-        ("q", "Quit"),
-        ("↑↓", "Scroll"),
-        ("1-8", "Tab"),
-        ("?", "Help"),
-    ];
-    for (i, (key, desc)) in standard_hints.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::raw("  "));
-        }
-        spans.push(Span::styled(
-            format!("{}", key),
-            Style::default().fg(t.key_hint).bold(),
-        ));
-        spans.push(Span::raw(format!(":{}", desc)));
-    }
-
-    let footer = Paragraph::new(Line::from(spans)).block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(t.border)),
-    );
-    f.render_widget(footer, area);
 }

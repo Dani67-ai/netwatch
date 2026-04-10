@@ -27,6 +27,12 @@ pub struct TrafficCollector {
     pub interfaces: Vec<InterfaceTraffic>,
 }
 
+impl Default for TrafficCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrafficCollector {
     pub fn new() -> Self {
         let stats = platform::collect_interface_stats().unwrap_or_default();

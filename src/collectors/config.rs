@@ -11,6 +11,12 @@ pub struct ConfigCollector {
     pub config: NetworkConfig,
 }
 
+impl Default for ConfigCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigCollector {
     pub fn new() -> Self {
         #[cfg(unix)]

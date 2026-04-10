@@ -121,6 +121,12 @@ pub struct IncidentRecorder {
     alert_events: VecDeque<TimedSnapshot<AlertEventSnapshot>>,
 }
 
+impl Default for IncidentRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IncidentRecorder {
     pub fn new() -> Self {
         Self {

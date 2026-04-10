@@ -699,6 +699,13 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     let dns = app.config_collector.config.dns_servers.first().cloned();
     app.health_prober.probe(gateway.as_deref(), dns.as_deref());
 
+    // Event loop design:
+    //   1. Render  — draw current app state to the terminal
+    //   2. Wait    — block on the next AppEvent (key, mouse, or tick)
+    //   3. Key/Mouse → update app state directly (synchronous, no I/O)
+    //   4. Tick    → app.tick() refreshes all collectors and feeds background threads
+    // Each iteration is: render → wait → handle → repeat.
+    // Collectors run on background threads and share state via Arc<Mutex<T>>.
     loop {
         terminal.draw(|f| {
             let area = f.size();
@@ -737,6 +744,12 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
             }
         }
     }
+}
+
+/// Clamp a scroll position after applying a signed delta.
+/// `max` is the highest allowed index (inclusive).
+fn clamp_scroll(current: usize, delta: isize, max: usize) -> usize {
+    ((current as isize + delta).max(0) as usize).min(max)
 }
 
 fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
@@ -820,118 +833,82 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
             }
         }
         MouseEventKind::ScrollUp => {
-            match app.current_tab {
-                Tab::Connections => {
-                    if app.traceroute_view_open {
-                        app.traceroute_scroll = app.traceroute_scroll.saturating_sub(3);
-                    } else {
-                        app.connection_scroll = app.connection_scroll.saturating_sub(3);
-                    }
-                }
-                Tab::Packets => {
-                    if app.stream_view_open {
-                        app.stream_scroll = app.stream_scroll.saturating_sub(3);
-                    } else {
-                        app.packet_follow = false;
-                        app.packet_scroll = app.packet_scroll.saturating_sub(3);
-                        let packets = app.packet_collector.get_packets();
-                        if let Some(pkt) = packets.get(app.packet_scroll) {
-                            app.packet_selected = Some(pkt.id);
-                        }
-                    }
-                }
-                Tab::Stats => {
-                    app.stats_scroll = app.stats_scroll.saturating_sub(3);
-                }
-                Tab::Topology => {
-                    if app.traceroute_view_open {
-                        app.traceroute_scroll = app.traceroute_scroll.saturating_sub(3);
-                    } else {
-                        app.topology_scroll = app.topology_scroll.saturating_sub(3);
-                    }
-                }
-                Tab::Timeline => {
-                    app.timeline_scroll = app.timeline_scroll.saturating_sub(3);
-                }
-                Tab::Processes => {
-                    app.process_scroll = app.process_scroll.saturating_sub(3);
-                }
-                Tab::Insights => {
-                    app.insights_scroll = app.insights_scroll.saturating_sub(3);
-                }
-                Tab::Dashboard | Tab::Interfaces => {
-                    app.selected_interface = match app.selected_interface {
-                        Some(0) | None => None,
-                        Some(i) => Some(i.saturating_sub(3)),
-                    };
-                }
-            }
+            scroll_tab(app, -3);
             if app.show_help {
-                app.help_scroll = app.help_scroll.saturating_sub(3);
+                app.help_scroll = clamp_scroll(app.help_scroll, -3, usize::MAX);
             }
         }
         MouseEventKind::ScrollDown => {
-            match app.current_tab {
-                Tab::Connections => {
-                    if app.traceroute_view_open {
-                        app.traceroute_scroll += 3;
-                    } else {
-                        let max = app
-                            .connection_collector
-                            .connections
-                            .lock()
-                            .unwrap()
-                            .len()
-                            .saturating_sub(1);
-                        app.connection_scroll = (app.connection_scroll + 3).min(max);
-                    }
-                }
-                Tab::Packets => {
-                    if app.stream_view_open {
-                        app.stream_scroll += 3;
-                    } else {
-                        app.packet_follow = false;
-                        let packets = app.packet_collector.get_packets();
-                        let max = packets.len().saturating_sub(1);
-                        app.packet_scroll = (app.packet_scroll + 3).min(max);
-                        if let Some(pkt) = packets.get(app.packet_scroll) {
-                            app.packet_selected = Some(pkt.id);
-                        }
-                    }
-                }
-                Tab::Stats => {
-                    app.stats_scroll += 3;
-                }
-                Tab::Topology => {
-                    if app.traceroute_view_open {
-                        app.traceroute_scroll += 3;
-                    } else {
-                        app.topology_scroll += 3;
-                    }
-                }
-                Tab::Timeline => {
-                    app.timeline_scroll += 3;
-                }
-                Tab::Processes => {
-                    let max = app.process_bandwidth.ranked().len().saturating_sub(1);
-                    app.process_scroll = (app.process_scroll + 3).min(max);
-                }
-                Tab::Insights => {
-                    app.insights_scroll += 3;
-                }
-                Tab::Dashboard | Tab::Interfaces => {
-                    let max = app.traffic.interfaces.len().saturating_sub(1);
-                    app.selected_interface = match app.selected_interface {
-                        None => Some(0.min(max)),
-                        Some(i) => Some((i + 3).min(max)),
-                    };
-                }
-            }
+            scroll_tab(app, 3);
             if app.show_help {
                 app.help_scroll += 3;
             }
         }
         _ => {}
+    }
+}
+
+/// Apply a scroll delta to whichever list the active tab displays.
+/// `delta` is signed: negative = scroll up, positive = scroll down.
+/// Bounded scrolling (where a max is known) clamps at the last item;
+/// unbounded lists (Stats, Timeline, Insights) are left unclamped.
+fn scroll_tab(app: &mut App, delta: isize) {
+    match app.current_tab {
+        Tab::Connections => {
+            if app.traceroute_view_open {
+                app.traceroute_scroll = clamp_scroll(app.traceroute_scroll, delta, usize::MAX);
+            } else {
+                let max = app
+                    .connection_collector
+                    .connections
+                    .lock()
+                    .unwrap()
+                    .len()
+                    .saturating_sub(1);
+                app.connection_scroll = clamp_scroll(app.connection_scroll, delta, max);
+            }
+        }
+        Tab::Packets => {
+            if app.stream_view_open {
+                app.stream_scroll = clamp_scroll(app.stream_scroll, delta, usize::MAX);
+            } else {
+                app.packet_follow = false;
+                let packets = app.packet_collector.get_packets();
+                let max = packets.len().saturating_sub(1);
+                app.packet_scroll = clamp_scroll(app.packet_scroll, delta, max);
+                if let Some(pkt) = packets.get(app.packet_scroll) {
+                    app.packet_selected = Some(pkt.id);
+                }
+            }
+        }
+        Tab::Stats => {
+            app.stats_scroll = clamp_scroll(app.stats_scroll, delta, usize::MAX);
+        }
+        Tab::Topology => {
+            if app.traceroute_view_open {
+                app.traceroute_scroll = clamp_scroll(app.traceroute_scroll, delta, usize::MAX);
+            } else {
+                app.topology_scroll = clamp_scroll(app.topology_scroll, delta, usize::MAX);
+            }
+        }
+        Tab::Timeline => {
+            app.timeline_scroll = clamp_scroll(app.timeline_scroll, delta, usize::MAX);
+        }
+        Tab::Processes => {
+            let max = app.process_bandwidth.ranked().len().saturating_sub(1);
+            app.process_scroll = clamp_scroll(app.process_scroll, delta, max);
+        }
+        Tab::Insights => {
+            app.insights_scroll = clamp_scroll(app.insights_scroll, delta, usize::MAX);
+        }
+        Tab::Dashboard | Tab::Interfaces => {
+            let max = app.traffic.interfaces.len().saturating_sub(1);
+            app.selected_interface = match (app.selected_interface, delta < 0) {
+                (Some(0) | None, true) => None,
+                (None, false) => Some(0_usize.min(max)),
+                (Some(i), _) => Some(clamp_scroll(i, delta, max)),
+            };
+        }
     }
 }
 
@@ -991,8 +968,8 @@ fn handle_settings_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                         app.packet_follow = app.user_config.packet_follow;
                         app.timeline_window = app.user_config.timeline_window_enum();
                         app.theme = crate::theme::by_name(&app.user_config.theme);
-                        if cursor >= ui::settings::cursor::AI_INSIGHTS
-                            && cursor <= ui::settings::cursor::AI_ENDPOINT
+                        if (ui::settings::cursor::AI_INSIGHTS..=ui::settings::cursor::AI_ENDPOINT)
+                            .contains(&cursor)
                         {
                             app.insights_collector = if app.user_config.insights_enabled {
                                 Some(crate::collectors::insights::InsightsCollector::new(
@@ -1333,10 +1310,10 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                         .collect();
                     &filtered
                 } else {
-                    &*packets
+                    &packets
                 }
             } else {
-                &*packets
+                &packets
             };
             let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
             let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -1491,107 +1468,8 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                 }
             }
         }
-        KeyCode::Up => match app.current_tab {
-            Tab::Connections => {
-                if app.traceroute_view_open {
-                    app.traceroute_scroll = app.traceroute_scroll.saturating_sub(1);
-                } else {
-                    app.connection_scroll = app.connection_scroll.saturating_sub(1);
-                }
-            }
-            Tab::Packets => {
-                app.packet_follow = false;
-                app.packet_scroll = app.packet_scroll.saturating_sub(1);
-                let packets = app.packet_collector.get_packets();
-                if let Some(pkt) = packets.get(app.packet_scroll) {
-                    app.packet_selected = Some(pkt.id);
-                }
-            }
-            Tab::Stats => {
-                app.stats_scroll = app.stats_scroll.saturating_sub(1);
-            }
-            Tab::Topology => {
-                if app.traceroute_view_open {
-                    app.traceroute_scroll = app.traceroute_scroll.saturating_sub(1);
-                } else {
-                    app.topology_scroll = app.topology_scroll.saturating_sub(1);
-                }
-            }
-            Tab::Timeline => {
-                app.timeline_scroll = app.timeline_scroll.saturating_sub(1);
-            }
-            Tab::Processes => {
-                app.process_scroll = app.process_scroll.saturating_sub(1);
-            }
-            Tab::Insights => {
-                app.insights_scroll = app.insights_scroll.saturating_sub(1);
-            }
-            _ => {
-                app.selected_interface = match app.selected_interface {
-                    Some(0) | None => None,
-                    Some(i) => Some(i - 1),
-                };
-            }
-        },
-        KeyCode::Down => match app.current_tab {
-            Tab::Connections => {
-                if app.traceroute_view_open {
-                    app.traceroute_scroll += 1;
-                } else {
-                    let max = app
-                        .connection_collector
-                        .connections
-                        .lock()
-                        .unwrap()
-                        .len()
-                        .saturating_sub(1);
-                    if app.connection_scroll < max {
-                        app.connection_scroll += 1;
-                    }
-                }
-            }
-            Tab::Packets => {
-                app.packet_follow = false;
-                let packets = app.packet_collector.get_packets();
-                let max = packets.len().saturating_sub(1);
-                if app.packet_scroll < max {
-                    app.packet_scroll += 1;
-                }
-                if let Some(pkt) = packets.get(app.packet_scroll) {
-                    app.packet_selected = Some(pkt.id);
-                }
-            }
-            Tab::Stats => {
-                app.stats_scroll += 1;
-            }
-            Tab::Topology => {
-                if app.traceroute_view_open {
-                    app.traceroute_scroll += 1;
-                } else {
-                    app.topology_scroll += 1;
-                }
-            }
-            Tab::Timeline => {
-                app.timeline_scroll += 1;
-            }
-            Tab::Processes => {
-                let max = app.process_bandwidth.ranked().len().saturating_sub(1);
-                if app.process_scroll < max {
-                    app.process_scroll += 1;
-                }
-            }
-            Tab::Insights => {
-                app.insights_scroll += 1;
-            }
-            _ => {
-                let max = app.traffic.interfaces.len().saturating_sub(1);
-                app.selected_interface = match app.selected_interface {
-                    None => Some(0),
-                    Some(i) if i < max => Some(i + 1),
-                    other => other,
-                };
-            }
-        },
+        KeyCode::Up => scroll_tab(app, -1),
+        KeyCode::Down => scroll_tab(app, 1),
         KeyCode::Char('/') if app.current_tab == Tab::Packets && !app.stream_view_open => {
             app.packet_filter_input = true;
             app.packet_filter_text = app.packet_filter_active.clone().unwrap_or_default();
@@ -1610,7 +1488,7 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
 }
 
 /// Returns connections sorted by `sort_column` (0=process, 1=pid, 2=proto, 3=state, 4=local, 5=remote).
-fn sort_connections(conns: &mut Vec<Connection>, sort_column: usize) {
+fn sort_connections(conns: &mut [Connection], sort_column: usize) {
     match sort_column {
         0 => conns.sort_by(|a, b| {
             a.process_name

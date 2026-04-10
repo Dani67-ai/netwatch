@@ -19,6 +19,12 @@ pub struct ProcessBandwidthCollector {
     ranked: Vec<ProcessBandwidth>,
 }
 
+impl Default for ProcessBandwidthCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProcessBandwidthCollector {
     pub fn new() -> Self {
         Self { ranked: Vec::new() }

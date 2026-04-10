@@ -237,12 +237,25 @@ pub struct InsightsCollector {
     pub endpoint: String,
 }
 
+/// Status of the AI analysis background thread.
+///
+/// Transitions:
+///   Idle → Analyzing      (snapshot submitted and interval elapsed)
+///   Analyzing → Available (successful response from model)
+///   Analyzing → Error     (model returned an error or request timed out)
+///   Analyzing → OllamaUnavailable  (connection refused — Ollama not running)
+///   Any → Idle            (collector restarted via settings change)
 #[derive(Clone, Debug)]
 pub enum InsightsStatus {
+    /// No snapshot has been submitted yet, or collector was just started.
     Idle,
+    /// Request sent to model; waiting for response.
     Analyzing,
+    /// At least one insight is available; next analysis will overwrite.
     Available,
+    /// Model returned an error or the HTTP request failed.
     Error(String),
+    /// Connection refused — Ollama is not running at the configured endpoint.
     OllamaUnavailable,
 }
 

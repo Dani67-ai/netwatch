@@ -6,18 +6,10 @@ use ratatui::{
 };
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // header
-            Constraint::Min(6),    // connection table
-            Constraint::Length(3), // footer
-        ])
-        .split(area);
-
-    render_header(f, app, chunks[0]);
-    render_connection_table(f, app, chunks[1]);
-    render_footer(f, app, chunks[2]);
+    let layout = crate::ui::widgets::frame_layout(area);
+    render_header(f, app, layout.header);
+    render_connection_table(f, app, layout.content);
+    render_footer(f, app, layout.footer);
 
     if app.traceroute_view_open {
         render_traceroute_overlay(f, app, area);
@@ -416,6 +408,24 @@ fn rtt_sparkline_color(
     }
 }
 
+fn extract_ip(addr: &str) -> Option<&str> {
+    if addr == "*:*" || addr.is_empty() {
+        return None;
+    }
+    if let Some(bracket_end) = addr.rfind("]:") {
+        Some(&addr[1..bracket_end])
+    } else if let Some(colon) = addr.rfind(':') {
+        let ip = &addr[..colon];
+        if ip == "*" {
+            None
+        } else {
+            Some(ip)
+        }
+    } else {
+        Some(addr)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,23 +500,5 @@ mod tests {
         let h: VecDeque<f64> = (0..20).map(|i| i as f64 * 5.0).collect();
         let s = rtt_sparkline(&h);
         assert_eq!(s.chars().count(), 20);
-    }
-}
-
-fn extract_ip(addr: &str) -> Option<&str> {
-    if addr == "*:*" || addr.is_empty() {
-        return None;
-    }
-    if let Some(bracket_end) = addr.rfind("]:") {
-        Some(&addr[1..bracket_end])
-    } else if let Some(colon) = addr.rfind(':') {
-        let ip = &addr[..colon];
-        if ip == "*" {
-            None
-        } else {
-            Some(ip)
-        }
-    } else {
-        Some(addr)
     }
 }

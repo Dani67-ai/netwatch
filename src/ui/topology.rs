@@ -190,7 +190,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
             .map(|r| format!("{:.1}ms", r))
             .unwrap_or_else(|| "—".to_string());
         left_nodes.push((
-            format!("Gateway"),
+            "Gateway".to_string(),
             format!("{}\n{} {}", gw, dot, rtt_str),
             style,
         ));

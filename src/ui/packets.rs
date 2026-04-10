@@ -128,7 +128,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
         } else {
             None
         });
-    let filter_expr = filter_text.and_then(|t| parse_filter(t));
+    let filter_expr = filter_text.and_then(parse_filter);
 
     let filtered: Vec<&CapturedPacket> = if let Some(ref expr) = filter_expr {
         packets.iter().filter(|p| matches_packet(expr, p)).collect()

@@ -29,6 +29,12 @@ pub struct TracerouteRunner {
     pub result: Arc<Mutex<TracerouteResult>>,
 }
 
+impl Default for TracerouteRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TracerouteRunner {
     pub fn new() -> Self {
         Self {

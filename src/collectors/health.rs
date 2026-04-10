@@ -21,6 +21,12 @@ pub struct HealthProber {
     busy: Arc<AtomicBool>,
 }
 
+impl Default for HealthProber {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HealthProber {
     pub fn new() -> Self {
         Self {

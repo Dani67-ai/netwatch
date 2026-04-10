@@ -23,6 +23,12 @@ pub struct ConnectionCollector {
     busy: Arc<AtomicBool>,
 }
 
+impl Default for ConnectionCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConnectionCollector {
     pub fn new() -> Self {
         Self {
@@ -76,6 +82,12 @@ pub struct TrackedConnection {
 pub struct ConnectionTimeline {
     pub tracked: Vec<TrackedConnection>,
     known_keys: HashMap<ConnectionKey, usize>,
+}
+
+impl Default for ConnectionTimeline {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConnectionTimeline {

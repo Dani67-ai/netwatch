@@ -6,18 +6,10 @@ use ratatui::{
 };
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // header
-            Constraint::Min(6),    // process table
-            Constraint::Length(3), // footer
-        ])
-        .split(area);
-
-    render_header(f, app, chunks[0]);
-    render_process_table(f, app, chunks[1]);
-    render_footer(f, app, chunks[2]);
+    let layout = widgets::frame_layout(area);
+    render_header(f, app, layout.header);
+    render_process_table(f, app, layout.content);
+    render_footer(f, app, layout.footer);
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {

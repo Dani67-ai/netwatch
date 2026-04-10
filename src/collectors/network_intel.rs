@@ -108,25 +108,13 @@ struct BeaconState {
 
 // ── DNS analytics state ────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DnsAnalytics {
     pub total_queries: u64,
     pub total_responses: u64,
     pub nxdomain_count: u64,
     pub latency_buckets: [u64; 8], // <5ms, <10ms, <25ms, <50ms, <100ms, <250ms, <500ms, >=500ms
     pub top_domains: Vec<(String, u32)>,
-}
-
-impl Default for DnsAnalytics {
-    fn default() -> Self {
-        Self {
-            total_queries: 0,
-            total_responses: 0,
-            nxdomain_count: 0,
-            latency_buckets: [0; 8],
-            top_domains: Vec::new(),
-        }
-    }
 }
 
 struct DnsTxnKey {
@@ -201,6 +189,12 @@ pub struct NetworkIntelCollector {
 
     // Housekeeping
     last_prune: Instant,
+}
+
+impl Default for NetworkIntelCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NetworkIntelCollector {
