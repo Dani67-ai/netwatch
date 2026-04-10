@@ -205,6 +205,15 @@ Call in `load()` and expose for tests.
 
 ## Done (archived)
 
+- **#4 render_frame helper** — `FrameChunks` + `frame_layout()` added to `widgets.rs`; used by Connections and Processes.
+- **#7 State machine docs + DnsCache timeout** — `DnsEntry::Pending` now carries `queued_at: Instant`; entries retry after 5s. State-transition doc comments added to `DnsEntry` and `InsightsStatus`.
+- **#8 Scroll deduplication** — `clamp_scroll()` and `scroll_tab()` added; all Up/Down key arms and both mouse scroll arms replaced; ~120 lines of duplicated match removed.
+- **#11 Tokio features** — narrowed from `"full"` to `["rt-multi-thread", "macros", "sync"]`.
+- **#12 Dead code / clippy** — 33 auto-fixes applied across 15 files (lifetime elision, `map_or`, useless `format!`, auto-deref, `RangeInclusive::contains`, `&mut Vec` → `&mut [T]`, etc.).
+- **#13 Lifecycle comment** — 6-line event loop design comment added at top of `run()`.
+
+## Previously done
+
 - **#1 Split event loop** — `AppEvent::Key` arm reduced from 775 lines to 5. Handlers extracted: `handle_key`, `handle_help_key`, `handle_settings_key`, `handle_filter_input`, `handle_bpf_input`, `handle_main_key`. Also extracted `sort_connections()` and `top_remote_ips()` which were duplicated 3× inline.
 - **#2 TCP flag constants** — `TCP_FLAG_SYN/ACK/RST/FIN/PSH/URG` defined in `packets.rs`; all hex literals replaced.
 - **#3 Settings cursor enum** — `settings::cursor` module with named constants (`THEME`, `AI_INSIGHTS`, etc.); magic integers eliminated from app.rs and settings.rs.
