@@ -566,12 +566,12 @@ fn render_latency_heatmap(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let hints = vec![
-        Span::styled("a", Style::default().fg(app.theme.key_hint).bold()),
-        Span::raw(":Analyze  "),
         Span::styled("p", Style::default().fg(app.theme.key_hint).bold()),
         Span::raw(":Pause  "),
         Span::styled("r", Style::default().fg(app.theme.key_hint).bold()),
-        Span::raw(":Refresh"),
+        Span::raw(":Refresh  "),
+        Span::styled(",", Style::default().fg(app.theme.key_hint).bold()),
+        Span::raw(":Settings"),
     ];
     widgets::render_footer(f, app, area, hints);
 }
