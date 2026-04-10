@@ -248,7 +248,10 @@ mod tests {
     #[test]
     fn tabs_are_in_order() {
         let tabs = visible_tabs(false);
-        let positions: Vec<u16> = tabs.iter().map(|&t| find_first_col(t, false).unwrap()).collect();
+        let positions: Vec<u16> = tabs
+            .iter()
+            .map(|&t| find_first_col(t, false).unwrap())
+            .collect();
         for i in 1..positions.len() {
             assert!(
                 positions[i] > positions[i - 1],

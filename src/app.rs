@@ -527,7 +527,12 @@ impl App {
         // Feed AI insights collector with a fresh network snapshot
         if let Some(ref collector) = self.insights_collector {
             let packets = self.packet_collector.get_packets();
-            let conns = self.connection_collector.connections.lock().unwrap().clone();
+            let conns = self
+                .connection_collector
+                .connections
+                .lock()
+                .unwrap()
+                .clone();
             let health = self.health_prober.status.lock().unwrap().clone();
             let (rx_bps, tx_bps) = self
                 .traffic
@@ -756,17 +761,19 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                                         app.theme = crate::theme::by_name(&app.user_config.theme);
                                         // Rebuild insights collector if AI settings changed
                                         if cursor >= 12 && cursor <= 14 {
-                                            app.insights_collector =
-                                                if app.user_config.insights_enabled {
-                                                    Some(
+                                            app.insights_collector = if app
+                                                .user_config
+                                                .insights_enabled
+                                            {
+                                                Some(
                                                         crate::collectors::insights::InsightsCollector::new(
                                                             &app.user_config.insights_model,
                                                             &app.user_config.insights_endpoint,
                                                         ),
                                                     )
-                                                } else {
-                                                    None
-                                                };
+                                            } else {
+                                                None
+                                            };
                                             // Switch away from Insights tab if disabled
                                             if !app.user_config.insights_enabled
                                                 && app.current_tab == Tab::Insights
@@ -987,11 +994,13 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
                             let conns =
                                 app.connection_collector.connections.lock().unwrap().clone();
                             let health = app.health_prober.status.lock().unwrap().clone();
-                            let (rx_bps, tx_bps) =
-                                app.traffic.interfaces.iter().fold(
-                                    (0.0f64, 0.0f64),
-                                    |(rx, tx), i| (rx + i.rx_rate, tx + i.tx_rate),
-                                );
+                            let (rx_bps, tx_bps) = app
+                                .traffic
+                                .interfaces
+                                .iter()
+                                .fold((0.0f64, 0.0f64), |(rx, tx), i| {
+                                    (rx + i.rx_rate, tx + i.tx_rate)
+                                });
                             let rx_str = crate::ui::widgets::format_bytes_rate(rx_bps);
                             let tx_str = crate::ui::widgets::format_bytes_rate(tx_bps);
                             let snapshot = crate::collectors::insights::NetworkSnapshot::build(
@@ -1498,8 +1507,7 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
         MouseEventKind::Down(MouseButton::Left) => {
             // Header row: click on tabs (row 0 or 1 within header area)
             if row < 3 {
-                if let Some(tab) =
-                    ui::widgets::tab_at_column(col, app.user_config.insights_enabled)
+                if let Some(tab) = ui::widgets::tab_at_column(col, app.user_config.insights_enabled)
                 {
                     app.current_tab = tab;
                     return;

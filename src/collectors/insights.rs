@@ -274,7 +274,13 @@ impl InsightsCollector {
         let endpoint_clone = endpoint.to_string();
 
         thread::spawn(move || {
-            analysis_loop(rx, insights_clone, status_clone, &model_clone, &endpoint_clone);
+            analysis_loop(
+                rx,
+                insights_clone,
+                status_clone,
+                &model_clone,
+                &endpoint_clone,
+            );
         });
 
         Self {
