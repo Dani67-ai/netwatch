@@ -5,13 +5,21 @@ use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
-const MAX_PACKETS: usize = 5000;
-const DNS_CACHE_MAX: usize = 4096;
-const MAX_STREAM_SEGMENTS: usize = 10_000;
-const MAX_STREAM_BYTES: usize = 2 * 1024 * 1024;
-const CAPTURE_SNAPLEN: i32 = 65535;
-const CAPTURE_TIMEOUT_MS: i32 = 100;
-const CAPTURE_BATCH_SIZE: usize = 64;
+const MAX_PACKETS: usize = 5000; // ring buffer; oldest packets are discarded when full
+const DNS_CACHE_MAX: usize = 4096; // max resolved hostname entries kept in memory
+const MAX_STREAM_SEGMENTS: usize = 10_000; // per-stream segment limit; caps memory per flow
+const MAX_STREAM_BYTES: usize = 2 * 1024 * 1024; // 2 MB per reassembled stream
+const CAPTURE_SNAPLEN: i32 = 65535; // capture full frames (no truncation)
+const CAPTURE_TIMEOUT_MS: i32 = 100; // pcap read timeout; controls batch latency
+const CAPTURE_BATCH_SIZE: usize = 64; // packets processed per tick before yielding
+
+// TCP control-bit masks (RFC 793)
+pub const TCP_FLAG_FIN: u8 = 0x01;
+pub const TCP_FLAG_SYN: u8 = 0x02;
+pub const TCP_FLAG_RST: u8 = 0x04;
+pub const TCP_FLAG_PSH: u8 = 0x08;
+pub const TCP_FLAG_ACK: u8 = 0x10;
+pub const TCP_FLAG_URG: u8 = 0x20;
 
 #[derive(Debug, Clone)]
 pub struct CapturedPacket {
@@ -48,15 +56,15 @@ pub enum ExpertSeverity {
 pub fn classify_expert(protocol: &str, info: &str, tcp_flags: Option<u8>) -> ExpertSeverity {
     // TCP RST → Error
     if let Some(flags) = tcp_flags {
-        if flags & 0x04 != 0 {
+        if flags & TCP_FLAG_RST != 0 {
             return ExpertSeverity::Error;
         }
         // SYN (without ACK) → Chat (connection initiation)
-        if flags & 0x02 != 0 && flags & 0x10 == 0 {
+        if flags & TCP_FLAG_SYN != 0 && flags & TCP_FLAG_ACK == 0 {
             return ExpertSeverity::Chat;
         }
         // FIN → Note (connection teardown)
-        if flags & 0x01 != 0 {
+        if flags & TCP_FLAG_FIN != 0 {
             return ExpertSeverity::Note;
         }
     }
@@ -332,7 +340,7 @@ impl StreamTracker {
 
         if stream.initiator.is_none() {
             if let Some(flags) = tcp_flags {
-                if flags & 0x02 != 0 {
+                if flags & TCP_FLAG_SYN != 0 {
                     stream.initiator = Some((src_ip.to_string(), src_port));
                 }
             }
@@ -344,8 +352,8 @@ impl StreamTracker {
         // Track TCP handshake timing
         if protocol == StreamProtocol::Tcp {
             if let Some(flags) = tcp_flags {
-                let is_syn = flags & 0x02 != 0;
-                let is_ack = flags & 0x10 != 0;
+                let is_syn = flags & TCP_FLAG_SYN != 0;
+                let is_ack = flags & TCP_FLAG_ACK != 0;
                 if is_syn && !is_ack {
                     // SYN — start of handshake
                     if stream.handshake.is_none() {
@@ -849,7 +857,7 @@ fn parse_tcp(
         "TCP: {} ({}) → {} ({}), Seq: {}, Flags: [{}], Win: {}",
         src_port, src_svc, dst_port, dst_svc, seq, flag_str, window
     );
-    if flags & 0x10 != 0 {
+    if flags & TCP_FLAG_ACK != 0 {
         detail.push_str(&format!(", Ack: {}", ack));
     }
     details.push(detail);
@@ -926,7 +934,7 @@ fn parse_tcp(
         flag_str,
         seq,
         window,
-        if flags & 0x10 != 0 {
+        if flags & TCP_FLAG_ACK != 0 {
             format!(" Ack={}", ack)
         } else {
             String::new()
@@ -1806,22 +1814,22 @@ fn format_ipv6(bytes: &[u8]) -> String {
 
 fn tcp_flags(flags: u8) -> String {
     let mut s = Vec::new();
-    if flags & 0x01 != 0 {
+    if flags & TCP_FLAG_FIN != 0 {
         s.push("FIN");
     }
-    if flags & 0x02 != 0 {
+    if flags & TCP_FLAG_SYN != 0 {
         s.push("SYN");
     }
-    if flags & 0x04 != 0 {
+    if flags & TCP_FLAG_RST != 0 {
         s.push("RST");
     }
-    if flags & 0x08 != 0 {
+    if flags & TCP_FLAG_PSH != 0 {
         s.push("PSH");
     }
-    if flags & 0x10 != 0 {
+    if flags & TCP_FLAG_ACK != 0 {
         s.push("ACK");
     }
-    if flags & 0x20 != 0 {
+    if flags & TCP_FLAG_URG != 0 {
         s.push("URG");
     }
     if s.is_empty() {

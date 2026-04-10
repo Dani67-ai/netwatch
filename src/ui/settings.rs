@@ -7,6 +7,26 @@ use ratatui::{
 
 pub const SETTINGS_COUNT: usize = 15;
 
+/// Named cursor positions for each settings row.
+/// Use these instead of magic integers when navigating or jumping to a setting.
+pub mod cursor {
+    pub const THEME: usize = 0;
+    pub const DEFAULT_TAB: usize = 1;
+    pub const REFRESH_RATE: usize = 2;
+    pub const CAPTURE_INTERFACE: usize = 3;
+    pub const SHOW_GEO: usize = 4;
+    pub const TIMELINE_WINDOW: usize = 5;
+    pub const PACKET_FOLLOW: usize = 6;
+    pub const BPF_FILTER: usize = 7;
+    pub const GEOIP_DB: usize = 8;
+    pub const GEOIP_ASN_DB: usize = 9;
+    pub const BANDWIDTH_THRESHOLD: usize = 10;
+    pub const PORT_SCAN_THRESHOLD: usize = 11;
+    pub const AI_INSIGHTS: usize = 12;
+    pub const AI_MODEL: usize = 13;
+    pub const AI_ENDPOINT: usize = 14;
+}
+
 struct SettingRow {
     label: &'static str,
     value: String,
@@ -201,7 +221,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Cancel"),
         ]
-    } else if app.settings_cursor == 0 {
+    } else if app.settings_cursor == cursor::THEME {
         vec![
             Span::styled("←→", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Theme  "),

@@ -114,7 +114,30 @@ impl NetwatchConfig {
         let Ok(contents) = fs::read_to_string(&path) else {
             return Self::default();
         };
-        toml::from_str(&contents).unwrap_or_default()
+        let mut cfg: Self = toml::from_str(&contents).unwrap_or_default();
+        cfg.validate();
+        cfg
+    }
+
+    /// Clamp and normalise fields that may arrive out of range from a hand-edited
+    /// config file. Called automatically by `load()`; also useful in tests.
+    pub fn validate(&mut self) {
+        self.refresh_rate_ms = self.refresh_rate_ms.clamp(100, 5000);
+        if self.theme.is_empty() {
+            self.theme = "dark".into();
+        }
+        if self.default_tab.is_empty() {
+            self.default_tab = "dashboard".into();
+        }
+        if self.timeline_window.is_empty() {
+            self.timeline_window = "5m".into();
+        }
+        if self.insights_model.is_empty() {
+            self.insights_model = "llama3.2".into();
+        }
+        if self.insights_endpoint.is_empty() {
+            self.insights_endpoint = "local".into();
+        }
     }
 
     /// Write current config to disk, creating parent directories as needed.
