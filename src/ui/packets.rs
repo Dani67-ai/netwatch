@@ -143,7 +143,9 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
     let offset = if app.packet_follow && total > visible_height {
         total - visible_height
     } else {
-        app.scroll.packet_scroll.min(total.saturating_sub(visible_height))
+        app.scroll
+            .packet_scroll
+            .min(total.saturating_sub(visible_height))
     };
 
     let rows: Vec<Row> = filtered
@@ -260,7 +262,8 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
 
 fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rect) {
     let selected_pkt = app
-        .scroll.packet_selected
+        .scroll
+        .packet_selected
         .and_then(|id| packets.iter().find(|p| p.id == id));
 
     match selected_pkt {

@@ -85,7 +85,8 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_rows = area.height.saturating_sub(3) as usize; // borders + header
     let scroll = app
-        .scroll.connection_scroll
+        .scroll
+        .connection_scroll
         .min(conns.len().saturating_sub(visible_rows));
 
     let rows: Vec<Row> = conns

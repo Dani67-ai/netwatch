@@ -90,7 +90,8 @@ fn render_chart(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_rows = inner.height.saturating_sub(1) as usize;
     let scroll = app
-        .scroll.timeline_scroll
+        .scroll
+        .timeline_scroll
         .min(sorted.len().saturating_sub(visible_rows.max(1)));
     let visible: Vec<&TrackedConnection> = sorted
         .iter()

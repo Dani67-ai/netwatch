@@ -334,7 +334,8 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(center_node, center_rect);
     }
     let scroll = app
-        .scroll.topology_scroll
+        .scroll
+        .topology_scroll
         .min(remotes.len().saturating_sub(max_right_nodes.max(1)));
     let visible_remotes: Vec<&RemoteNode> =
         remotes.iter().skip(scroll).take(max_right_nodes).collect();

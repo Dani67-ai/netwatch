@@ -49,8 +49,7 @@ pub fn collect_interface_info() -> Result<Vec<InterfaceInfo>> {
         let name = entry.file_name().to_string_lossy().to_string();
         let base = net_dir.join(&name);
 
-        let operstate = fs::read_to_string(base.join("operstate"))
-            .unwrap_or_default();
+        let operstate = fs::read_to_string(base.join("operstate")).unwrap_or_default();
         let operstate = operstate.trim();
         let is_up = operstate == "up"
             || (operstate == "unknown"
