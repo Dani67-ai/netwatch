@@ -187,7 +187,7 @@ fn render_insights(f: &mut Frame, app: &App, area: Rect) {
     // Apply scroll
     let total_lines = lines.len();
     let scroll = app
-        .insights_scroll
+        .scroll.insights_scroll
         .min(total_lines.saturating_sub(visible_height));
     let visible_lines: Vec<Line> = lines
         .into_iter()

@@ -143,7 +143,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
     let offset = if app.packet_follow && total > visible_height {
         total - visible_height
     } else {
-        app.packet_scroll.min(total.saturating_sub(visible_height))
+        app.scroll.packet_scroll.min(total.saturating_sub(visible_height))
     };
 
     let rows: Vec<Row> = filtered
@@ -152,7 +152,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
         .take(visible_height)
         .map(|pkt| {
             let proto_style = protocol_color(&pkt.protocol, &app.theme);
-            let selected = app.packet_selected == Some(pkt.id);
+            let selected = app.scroll.packet_selected == Some(pkt.id);
             let row_style = if selected {
                 Style::default().bg(app.theme.selection_bg)
             } else {
@@ -260,7 +260,7 @@ fn render_packet_list(f: &mut Frame, app: &App, packets: &[CapturedPacket], area
 
 fn render_detail(f: &mut Frame, app: &App, packets: &[CapturedPacket], area: Rect) {
     let selected_pkt = app
-        .packet_selected
+        .scroll.packet_selected
         .and_then(|id| packets.iter().find(|p| p.id == id));
 
     match selected_pkt {
@@ -650,7 +650,7 @@ fn render_stream_view(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = chunks[1].height.saturating_sub(2) as usize;
     let total_lines = content_lines.len();
     let max_scroll = total_lines.saturating_sub(visible_height);
-    let scroll = app.stream_scroll.min(max_scroll);
+    let scroll = app.scroll.stream_scroll.min(max_scroll);
 
     let visible_lines: Vec<Line> = content_lines
         .into_iter()

@@ -93,43 +93,9 @@ pub fn frame_layout(area: Rect) -> FrameChunks {
 
 ---
 
-### 5. Group `App` fields into semantic substruct
-
-**Where:** `src/app.rs` lines ~89–160  
-**Problem:** `App` has 60+ fields covering state, collectors, UI positions, filters, and feature flags. It's a god object. New contributors can't tell which fields belong together.  
-**Fix (incremental):** Start with UI state:
-
-```rust
-pub struct UiScrollState {
-    pub packet_scroll: usize,
-    pub packet_selected: Option<u64>,
-    pub connections_scroll: usize,
-    pub topology_scroll: usize,
-    pub insights_scroll: usize,
-    // ...
-}
-```
-
-Move into `App` as `pub scroll: UiScrollState`. Repeat for filters, export state, etc.
-
 ---
 
 ## Medium impact
-
-### 6. Extract protocol parsers in `packets.rs`
-
-**Where:** `src/collectors/packets.rs` (~2900 lines)  
-**Problem:** DNS, DHCP, NTP, QUIC, HTTP, TLS parsers are nested if/else chains in `parse_transport()` and `parse_udp()`. Adding a new protocol requires navigating the entire chain.  
-**Fix:** Define a trait and register parsers in a `Vec`:
-
-```rust
-trait ProtocolParser: Send + Sync {
-    fn matches(&self, src_port: u16, dst_port: u16, data: &[u8]) -> bool;
-    fn parse(&self, data: &[u8]) -> ParsedProtocol;
-}
-```
-
----
 
 ### 7. Document the `analysis_loop` / `DnsCache` state machines
 
@@ -205,6 +171,8 @@ Call in `load()` and expose for tests.
 
 ## Done (archived)
 
+- **#5 Group App scroll fields** — `UiScrollState` struct extracted from `App`; 11 scroll/selection fields moved into `app.scroll.*`; `App` field count reduced from 60 to 50.
+- **#6 Extract protocol parsers** — `UdpProtocolParser` and `TcpProtocolParser` traits defined; DNS, DHCP, SSDP, NTP, QUIC (UDP) and DNS-over-TCP, TLS, HTTP (TCP) implemented as unit structs; registered in `UDP_PARSERS` / `TCP_PARSERS` (`LazyLock`); if/else chains in `parse_udp` and `parse_tcp` replaced with trait dispatch loops.
 - **#4 render_frame helper** — `FrameChunks` + `frame_layout()` added to `widgets.rs`; used by Connections and Processes.
 - **#7 State machine docs + DnsCache timeout** — `DnsEntry::Pending` now carries `queued_at: Instant`; entries retry after 5s. State-transition doc comments added to `DnsEntry` and `InsightsStatus`.
 - **#8 Scroll deduplication** — `clamp_scroll()` and `scroll_tab()` added; all Up/Down key arms and both mouse scroll arms replaced; ~120 lines of duplicated match removed.

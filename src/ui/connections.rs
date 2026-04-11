@@ -85,7 +85,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_rows = area.height.saturating_sub(3) as usize; // borders + header
     let scroll = app
-        .connection_scroll
+        .scroll.connection_scroll
         .min(conns.len().saturating_sub(visible_rows));
 
     let rows: Vec<Row> = conns
@@ -100,7 +100,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                 _ => Style::default().fg(app.theme.text_muted),
             };
 
-            let row_style = if i + scroll == app.connection_scroll {
+            let row_style = if i + scroll == app.scroll.connection_scroll {
                 Style::default().bg(app.theme.selection_bg)
             } else {
                 Style::default()
@@ -302,7 +302,7 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_height = inner.height as usize;
     let max_scroll = lines.len().saturating_sub(visible_height);
-    let scroll = app.traceroute_scroll.min(max_scroll);
+    let scroll = app.scroll.traceroute_scroll.min(max_scroll);
     let visible_lines: Vec<Line> = lines
         .into_iter()
         .skip(scroll)

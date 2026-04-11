@@ -40,7 +40,7 @@ fn render_process_table(f: &mut Frame, app: &App, area: Rect) {
     let ranked = app.process_bandwidth.ranked();
     let visible_rows = area.height.saturating_sub(3) as usize;
     let scroll = app
-        .process_scroll
+        .scroll.process_scroll
         .min(ranked.len().saturating_sub(visible_rows));
 
     let rows: Vec<Row> = ranked
@@ -48,7 +48,7 @@ fn render_process_table(f: &mut Frame, app: &App, area: Rect) {
         .skip(scroll)
         .enumerate()
         .map(|(i, proc)| {
-            let row_style = if i + scroll == app.process_scroll {
+            let row_style = if i + scroll == app.scroll.process_scroll {
                 Style::default().bg(app.theme.selection_bg)
             } else {
                 Style::default()

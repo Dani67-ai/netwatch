@@ -90,7 +90,7 @@ fn render_chart(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_rows = inner.height.saturating_sub(1) as usize;
     let scroll = app
-        .timeline_scroll
+        .scroll.timeline_scroll
         .min(sorted.len().saturating_sub(visible_rows.max(1)));
     let visible: Vec<&TrackedConnection> = sorted
         .iter()
@@ -103,7 +103,7 @@ fn render_chart(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, tracked)| {
-            let is_selected = i + scroll == app.timeline_scroll;
+            let is_selected = i + scroll == app.scroll.timeline_scroll;
 
             // Build label: "process    remote_ip"
             let proc_name = tracked.process_name.as_deref().unwrap_or("—");

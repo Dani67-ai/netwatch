@@ -96,7 +96,7 @@ fn render_protocol_table(f: &mut Frame, app: &App, stats: &Stats, area: Rect) {
 
     let visible_height = area.height.saturating_sub(3) as usize;
     let total = stats.protocols.len();
-    let offset = app.stats_scroll.min(total.saturating_sub(visible_height));
+    let offset = app.scroll.stats_scroll.min(total.saturating_sub(visible_height));
 
     let rows: Vec<Row> = stats
         .protocols

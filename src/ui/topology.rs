@@ -334,7 +334,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(center_node, center_rect);
     }
     let scroll = app
-        .topology_scroll
+        .scroll.topology_scroll
         .min(remotes.len().saturating_sub(max_right_nodes.max(1)));
     let visible_remotes: Vec<&RemoteNode> =
         remotes.iter().skip(scroll).take(max_right_nodes).collect();
@@ -345,7 +345,7 @@ fn render_topology(f: &mut Frame, app: &App, area: Rect) {
             break;
         }
 
-        let is_selected = i + scroll == app.topology_scroll;
+        let is_selected = i + scroll == app.scroll.topology_scroll;
         let border_style = if is_selected {
             Style::default().fg(t.active_tab)
         } else if remote.has_established {
@@ -574,7 +574,7 @@ fn render_traceroute_overlay(f: &mut Frame, app: &App, area: Rect) {
 
     let visible_height = inner.height as usize;
     let max_scroll = lines.len().saturating_sub(visible_height);
-    let scroll = app.traceroute_scroll.min(max_scroll);
+    let scroll = app.scroll.traceroute_scroll.min(max_scroll);
     let visible_lines: Vec<Line> = lines
         .into_iter()
         .skip(scroll)

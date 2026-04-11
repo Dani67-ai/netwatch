@@ -905,58 +905,20 @@ fn parse_tcp(
         &[]
     };
 
-    // DNS over TCP (port 53)
-    if (src_port == 53 || dst_port == 53) && payload.len() > 2 {
-        let dns_data = &payload[2..];
-        if let Some((dns_info, dns_detail)) = parse_dns(dns_data) {
-            details.push(dns_detail);
-            let info = format!("{} → {} {}", src_ip, dst_ip, dns_info);
-            return (
-                "DNS".into(),
-                Some(src_port),
-                Some(dst_port),
-                info,
-                data_offset,
-                Some(flags),
-            );
-        }
-    }
-
-    // TLS
-    if !payload.is_empty() {
-        if let Some((tls_info, tls_detail)) = parse_tls(payload) {
-            details.push(tls_detail);
-            let info = format!(
-                "{}:{} → {}:{} {} [{}]",
-                src_ip, src_port, dst_ip, dst_port, tls_info, flag_str
-            );
-            return (
-                "TLS".into(),
-                Some(src_port),
-                Some(dst_port),
-                info,
-                data_offset,
-                Some(flags),
-            );
-        }
-    }
-
-    // HTTP
-    if !payload.is_empty() {
-        if let Some((http_info, http_detail)) = parse_http(payload) {
-            details.push(http_detail);
-            let info = format!(
-                "{}:{} → {}:{} {}",
-                src_ip, src_port, dst_ip, dst_port, http_info
-            );
-            return (
-                "HTTP".into(),
-                Some(src_port),
-                Some(dst_port),
-                info,
-                data_offset,
-                Some(flags),
-            );
+    let ctx = ParseCtx { src_ip, dst_ip, src_port, dst_port };
+    for parser in TCP_PARSERS.iter() {
+        if parser.matches(src_port, dst_port, payload) {
+            if let Some(result) = parser.parse(payload, &ctx, &flag_str) {
+                details.push(result.detail);
+                return (
+                    result.proto,
+                    Some(src_port),
+                    Some(dst_port),
+                    result.info,
+                    data_offset,
+                    Some(flags),
+                );
+            }
         }
     }
 
@@ -1016,63 +978,13 @@ fn parse_udp(
 
     let payload = if data.len() > 8 { &data[8..] } else { &[] };
 
-    // DNS
-    if (src_port == 53 || dst_port == 53 || src_port == 5353 || dst_port == 5353)
-        && !payload.is_empty()
-    {
-        let proto_name = if src_port == 5353 || dst_port == 5353 {
-            "mDNS"
-        } else {
-            "DNS"
-        };
-        if let Some((dns_info, dns_detail)) = parse_dns(payload) {
-            details.push(dns_detail);
-            let info = format!("{} → {} {}", src_ip, dst_ip, dns_info);
-            return (
-                proto_name.into(),
-                Some(src_port),
-                Some(dst_port),
-                info,
-                8,
-                None,
-            );
-        }
-    }
-
-    // DHCP
-    if (src_port == 67 || src_port == 68) && (dst_port == 67 || dst_port == 68) {
-        let dhcp_info = parse_dhcp(payload);
-        details.push(format!("DHCP: {}", dhcp_info));
-        let info = format!("{} → {} {}", src_ip, dst_ip, dhcp_info);
-        return ("DHCP".into(), Some(src_port), Some(dst_port), info, 8, None);
-    }
-
-    // SSDP (UPnP)
-    if src_port == 1900 || dst_port == 1900 {
-        if let Some((ssdp_info, ssdp_detail)) = parse_ssdp(payload) {
-            details.push(ssdp_detail);
-            let info = format!("{} → {} {}", src_ip, dst_ip, ssdp_info);
-            return ("SSDP".into(), Some(src_port), Some(dst_port), info, 8, None);
-        }
-    }
-
-    // NTP
-    if src_port == 123 || dst_port == 123 {
-        let ntp_info = parse_ntp(payload);
-        details.push(format!("NTP: {}", ntp_info));
-        let info = format!("{} → {} {}", src_ip, dst_ip, ntp_info);
-        return ("NTP".into(), Some(src_port), Some(dst_port), info, 8, None);
-    }
-
-    // QUIC
-    if (dst_port == 443 || src_port == 443) && !payload.is_empty() {
-        if let Some((quic_info, quic_detail)) = parse_quic(payload) {
-            details.push(quic_detail);
-            let info = format!(
-                "{}:{} → {}:{} {}",
-                src_ip, src_port, dst_ip, dst_port, quic_info
-            );
-            return ("QUIC".into(), Some(src_port), Some(dst_port), info, 8, None);
+    let ctx = ParseCtx { src_ip, dst_ip, src_port, dst_port };
+    for parser in UDP_PARSERS.iter() {
+        if parser.matches(src_port, dst_port, payload) {
+            if let Some(result) = parser.parse(payload, &ctx) {
+                details.push(result.detail);
+                return (result.proto, Some(src_port), Some(dst_port), result.info, 8, None);
+            }
         }
     }
 
@@ -1152,6 +1064,183 @@ fn parse_icmpv6(
     let info = format!("{} → {} {}", src_ip, dst_ip, type_name);
     ("ICMPv6".into(), None, None, info)
 }
+
+// ── Protocol parser traits ─────────────────────────────────────────────────────
+
+/// Shared address/port context passed to every protocol parser.
+struct ParseCtx<'a> {
+    src_ip: &'a str,
+    dst_ip: &'a str,
+    src_port: u16,
+    dst_port: u16,
+}
+
+/// Successful result from a protocol parser: protocol name, one-line summary,
+/// and a detail line suitable for `details.push(...)`.
+struct ParsedProto {
+    proto: String,
+    info: String,
+    detail: String,
+}
+
+/// Pluggable UDP application-layer parser. Implement this trait and add an
+/// instance to `UDP_PARSERS` to support a new protocol without modifying
+/// `parse_udp` itself.
+trait UdpProtocolParser: Send + Sync {
+    /// Returns `true` if this parser should attempt to parse the datagram.
+    fn matches(&self, src_port: u16, dst_port: u16, payload: &[u8]) -> bool;
+    /// Attempt to parse `payload`. Returns `None` to pass to the next parser.
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto>;
+}
+
+/// Pluggable TCP application-layer parser.
+trait TcpProtocolParser: Send + Sync {
+    fn matches(&self, src_port: u16, dst_port: u16, payload: &[u8]) -> bool;
+    /// Parse `payload` and produce a result. `flag_str` is the TCP flags label.
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx, flag_str: &str) -> Option<ParsedProto>;
+}
+
+// ── UDP parser implementations ─────────────────────────────────────────────
+
+struct UdpDnsParser;
+impl UdpProtocolParser for UdpDnsParser {
+    fn matches(&self, src_port: u16, dst_port: u16, payload: &[u8]) -> bool {
+        (src_port == 53 || dst_port == 53 || src_port == 5353 || dst_port == 5353)
+            && !payload.is_empty()
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto> {
+        let proto_name = if ctx.src_port == 5353 || ctx.dst_port == 5353 {
+            "mDNS"
+        } else {
+            "DNS"
+        };
+        let (dns_info, detail) = parse_dns(payload)?;
+        let info = format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, dns_info);
+        Some(ParsedProto { proto: proto_name.into(), info, detail })
+    }
+}
+
+struct DhcpParser;
+impl UdpProtocolParser for DhcpParser {
+    fn matches(&self, src_port: u16, dst_port: u16, _payload: &[u8]) -> bool {
+        (src_port == 67 || src_port == 68) && (dst_port == 67 || dst_port == 68)
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto> {
+        let dhcp_info = parse_dhcp(payload);
+        Some(ParsedProto {
+            proto: "DHCP".into(),
+            info: format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, dhcp_info),
+            detail: format!("DHCP: {}", dhcp_info),
+        })
+    }
+}
+
+struct SsdpParser;
+impl UdpProtocolParser for SsdpParser {
+    fn matches(&self, src_port: u16, dst_port: u16, _payload: &[u8]) -> bool {
+        src_port == 1900 || dst_port == 1900
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto> {
+        let (ssdp_info, detail) = parse_ssdp(payload)?;
+        let info = format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, ssdp_info);
+        Some(ParsedProto { proto: "SSDP".into(), info, detail })
+    }
+}
+
+struct NtpParser;
+impl UdpProtocolParser for NtpParser {
+    fn matches(&self, src_port: u16, dst_port: u16, _payload: &[u8]) -> bool {
+        src_port == 123 || dst_port == 123
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto> {
+        let ntp_info = parse_ntp(payload);
+        Some(ParsedProto {
+            proto: "NTP".into(),
+            info: format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, ntp_info),
+            detail: format!("NTP: {}", ntp_info),
+        })
+    }
+}
+
+struct QuicParser;
+impl UdpProtocolParser for QuicParser {
+    fn matches(&self, src_port: u16, dst_port: u16, payload: &[u8]) -> bool {
+        (dst_port == 443 || src_port == 443) && !payload.is_empty()
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto> {
+        let (quic_info, detail) = parse_quic(payload)?;
+        let info = format!(
+            "{}:{} → {}:{} {}",
+            ctx.src_ip, ctx.src_port, ctx.dst_ip, ctx.dst_port, quic_info
+        );
+        Some(ParsedProto { proto: "QUIC".into(), info, detail })
+    }
+}
+
+static UDP_PARSERS: std::sync::LazyLock<Vec<Box<dyn UdpProtocolParser>>> =
+    std::sync::LazyLock::new(|| {
+        vec![
+            Box::new(UdpDnsParser),
+            Box::new(DhcpParser),
+            Box::new(SsdpParser),
+            Box::new(NtpParser),
+            Box::new(QuicParser),
+        ]
+    });
+
+// ── TCP application-layer parser implementations ───────────────────────────
+
+struct TcpDnsParser;
+impl TcpProtocolParser for TcpDnsParser {
+    fn matches(&self, src_port: u16, dst_port: u16, payload: &[u8]) -> bool {
+        (src_port == 53 || dst_port == 53) && payload.len() > 2
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx, _flag_str: &str) -> Option<ParsedProto> {
+        let dns_data = &payload[2..];
+        let (dns_info, detail) = parse_dns(dns_data)?;
+        let info = format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, dns_info);
+        Some(ParsedProto { proto: "DNS".into(), info, detail })
+    }
+}
+
+struct TlsParser;
+impl TcpProtocolParser for TlsParser {
+    fn matches(&self, _src_port: u16, _dst_port: u16, payload: &[u8]) -> bool {
+        !payload.is_empty()
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx, flag_str: &str) -> Option<ParsedProto> {
+        let (tls_info, detail) = parse_tls(payload)?;
+        let info = format!(
+            "{}:{} → {}:{} {} [{}]",
+            ctx.src_ip, ctx.src_port, ctx.dst_ip, ctx.dst_port, tls_info, flag_str
+        );
+        Some(ParsedProto { proto: "TLS".into(), info, detail })
+    }
+}
+
+struct HttpParser;
+impl TcpProtocolParser for HttpParser {
+    fn matches(&self, _src_port: u16, _dst_port: u16, payload: &[u8]) -> bool {
+        !payload.is_empty()
+    }
+    fn parse(&self, payload: &[u8], ctx: &ParseCtx, _flag_str: &str) -> Option<ParsedProto> {
+        let (http_info, detail) = parse_http(payload)?;
+        let info = format!(
+            "{}:{} → {}:{} {}",
+            ctx.src_ip, ctx.src_port, ctx.dst_ip, ctx.dst_port, http_info
+        );
+        Some(ParsedProto { proto: "HTTP".into(), info, detail })
+    }
+}
+
+static TCP_PARSERS: std::sync::LazyLock<Vec<Box<dyn TcpProtocolParser>>> =
+    std::sync::LazyLock::new(|| {
+        vec![
+            Box::new(TcpDnsParser),
+            Box::new(TlsParser),
+            Box::new(HttpParser),
+        ]
+    });
 
 // ── Application-layer parsers ───────────────────────────────
 
