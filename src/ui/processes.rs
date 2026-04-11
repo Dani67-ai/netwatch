@@ -40,7 +40,8 @@ fn render_process_table(f: &mut Frame, app: &App, area: Rect) {
     let ranked = app.process_bandwidth.ranked();
     let visible_rows = area.height.saturating_sub(3) as usize;
     let scroll = app
-        .scroll.process_scroll
+        .scroll
+        .process_scroll
         .min(ranked.len().saturating_sub(visible_rows));
 
     let rows: Vec<Row> = ranked

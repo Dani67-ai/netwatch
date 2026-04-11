@@ -824,8 +824,11 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                     }
                     Tab::Topology if !app.traceroute_view_open => {
                         if clicked_row > 0 {
-                            app.scroll.topology_scroll =
-                                app.scroll.topology_scroll.saturating_sub(0).max(clicked_row - 1);
+                            app.scroll.topology_scroll = app
+                                .scroll
+                                .topology_scroll
+                                .saturating_sub(0)
+                                .max(clicked_row - 1);
                         }
                     }
                     Tab::Timeline => {
@@ -869,7 +872,8 @@ fn scroll_tab(app: &mut App, delta: isize) {
     match app.current_tab {
         Tab::Connections => {
             if app.traceroute_view_open {
-                app.scroll.traceroute_scroll = clamp_scroll(app.scroll.traceroute_scroll, delta, usize::MAX);
+                app.scroll.traceroute_scroll =
+                    clamp_scroll(app.scroll.traceroute_scroll, delta, usize::MAX);
             } else {
                 let max = app
                     .connection_collector
@@ -878,12 +882,14 @@ fn scroll_tab(app: &mut App, delta: isize) {
                     .unwrap()
                     .len()
                     .saturating_sub(1);
-                app.scroll.connection_scroll = clamp_scroll(app.scroll.connection_scroll, delta, max);
+                app.scroll.connection_scroll =
+                    clamp_scroll(app.scroll.connection_scroll, delta, max);
             }
         }
         Tab::Packets => {
             if app.stream_view_open {
-                app.scroll.stream_scroll = clamp_scroll(app.scroll.stream_scroll, delta, usize::MAX);
+                app.scroll.stream_scroll =
+                    clamp_scroll(app.scroll.stream_scroll, delta, usize::MAX);
             } else {
                 app.packet_follow = false;
                 let packets = app.packet_collector.get_packets();
@@ -899,20 +905,24 @@ fn scroll_tab(app: &mut App, delta: isize) {
         }
         Tab::Topology => {
             if app.traceroute_view_open {
-                app.scroll.traceroute_scroll = clamp_scroll(app.scroll.traceroute_scroll, delta, usize::MAX);
+                app.scroll.traceroute_scroll =
+                    clamp_scroll(app.scroll.traceroute_scroll, delta, usize::MAX);
             } else {
-                app.scroll.topology_scroll = clamp_scroll(app.scroll.topology_scroll, delta, usize::MAX);
+                app.scroll.topology_scroll =
+                    clamp_scroll(app.scroll.topology_scroll, delta, usize::MAX);
             }
         }
         Tab::Timeline => {
-            app.scroll.timeline_scroll = clamp_scroll(app.scroll.timeline_scroll, delta, usize::MAX);
+            app.scroll.timeline_scroll =
+                clamp_scroll(app.scroll.timeline_scroll, delta, usize::MAX);
         }
         Tab::Processes => {
             let max = app.process_bandwidth.ranked().len().saturating_sub(1);
             app.scroll.process_scroll = clamp_scroll(app.scroll.process_scroll, delta, max);
         }
         Tab::Insights => {
-            app.scroll.insights_scroll = clamp_scroll(app.scroll.insights_scroll, delta, usize::MAX);
+            app.scroll.insights_scroll =
+                clamp_scroll(app.scroll.insights_scroll, delta, usize::MAX);
         }
         Tab::Dashboard | Tab::Interfaces => {
             let max = app.traffic.interfaces.len().saturating_sub(1);
@@ -1474,7 +1484,9 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                 let offset = if app.packet_follow && total > visible_height {
                     total - visible_height
                 } else {
-                    app.scroll.packet_scroll.min(total.saturating_sub(visible_height))
+                    app.scroll
+                        .packet_scroll
+                        .min(total.saturating_sub(visible_height))
                 };
                 if let Some(pkt) = packets.get(offset) {
                     app.scroll.packet_selected = Some(pkt.id);

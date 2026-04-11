@@ -905,7 +905,12 @@ fn parse_tcp(
         &[]
     };
 
-    let ctx = ParseCtx { src_ip, dst_ip, src_port, dst_port };
+    let ctx = ParseCtx {
+        src_ip,
+        dst_ip,
+        src_port,
+        dst_port,
+    };
     for parser in TCP_PARSERS.iter() {
         if parser.matches(src_port, dst_port, payload) {
             if let Some(result) = parser.parse(payload, &ctx, &flag_str) {
@@ -978,12 +983,24 @@ fn parse_udp(
 
     let payload = if data.len() > 8 { &data[8..] } else { &[] };
 
-    let ctx = ParseCtx { src_ip, dst_ip, src_port, dst_port };
+    let ctx = ParseCtx {
+        src_ip,
+        dst_ip,
+        src_port,
+        dst_port,
+    };
     for parser in UDP_PARSERS.iter() {
         if parser.matches(src_port, dst_port, payload) {
             if let Some(result) = parser.parse(payload, &ctx) {
                 details.push(result.detail);
-                return (result.proto, Some(src_port), Some(dst_port), result.info, 8, None);
+                return (
+                    result.proto,
+                    Some(src_port),
+                    Some(dst_port),
+                    result.info,
+                    8,
+                    None,
+                );
             }
         }
     }
@@ -1116,7 +1133,11 @@ impl UdpProtocolParser for UdpDnsParser {
         };
         let (dns_info, detail) = parse_dns(payload)?;
         let info = format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, dns_info);
-        Some(ParsedProto { proto: proto_name.into(), info, detail })
+        Some(ParsedProto {
+            proto: proto_name.into(),
+            info,
+            detail,
+        })
     }
 }
 
@@ -1143,7 +1164,11 @@ impl UdpProtocolParser for SsdpParser {
     fn parse(&self, payload: &[u8], ctx: &ParseCtx) -> Option<ParsedProto> {
         let (ssdp_info, detail) = parse_ssdp(payload)?;
         let info = format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, ssdp_info);
-        Some(ParsedProto { proto: "SSDP".into(), info, detail })
+        Some(ParsedProto {
+            proto: "SSDP".into(),
+            info,
+            detail,
+        })
     }
 }
 
@@ -1173,7 +1198,11 @@ impl UdpProtocolParser for QuicParser {
             "{}:{} → {}:{} {}",
             ctx.src_ip, ctx.src_port, ctx.dst_ip, ctx.dst_port, quic_info
         );
-        Some(ParsedProto { proto: "QUIC".into(), info, detail })
+        Some(ParsedProto {
+            proto: "QUIC".into(),
+            info,
+            detail,
+        })
     }
 }
 
@@ -1199,7 +1228,11 @@ impl TcpProtocolParser for TcpDnsParser {
         let dns_data = &payload[2..];
         let (dns_info, detail) = parse_dns(dns_data)?;
         let info = format!("{} → {} {}", ctx.src_ip, ctx.dst_ip, dns_info);
-        Some(ParsedProto { proto: "DNS".into(), info, detail })
+        Some(ParsedProto {
+            proto: "DNS".into(),
+            info,
+            detail,
+        })
     }
 }
 
@@ -1214,7 +1247,11 @@ impl TcpProtocolParser for TlsParser {
             "{}:{} → {}:{} {} [{}]",
             ctx.src_ip, ctx.src_port, ctx.dst_ip, ctx.dst_port, tls_info, flag_str
         );
-        Some(ParsedProto { proto: "TLS".into(), info, detail })
+        Some(ParsedProto {
+            proto: "TLS".into(),
+            info,
+            detail,
+        })
     }
 }
 
@@ -1229,7 +1266,11 @@ impl TcpProtocolParser for HttpParser {
             "{}:{} → {}:{} {}",
             ctx.src_ip, ctx.src_port, ctx.dst_ip, ctx.dst_port, http_info
         );
-        Some(ParsedProto { proto: "HTTP".into(), info, detail })
+        Some(ParsedProto {
+            proto: "HTTP".into(),
+            info,
+            detail,
+        })
     }
 }
 
