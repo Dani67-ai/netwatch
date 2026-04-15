@@ -11,8 +11,24 @@ use std::io;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Handle --generate-config before entering TUI mode
+    // Handle CLI flags before entering TUI mode
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("netwatch {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!(
+            "netwatch {} — real-time network diagnostics in your terminal\n\n\
+             USAGE:\n    netwatch [OPTIONS]\n    sudo netwatch       Full mode (health probes + packet capture)\n\n\
+             OPTIONS:\n    --generate-config    Write a default config file and exit\n    \
+             -h, --help           Print help\n    -V, --version        Print version\n\n\
+             KEYS (in TUI):\n    1-7   Switch tabs    /     Filter    q   Quit\n    \
+             Shift+R/F/E   Flight Recorder: arm / freeze / export",
+            env!("CARGO_PKG_VERSION")
+        );
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--generate-config") {
         let cfg = NetwatchConfig::default();
         cfg.save()?;
