@@ -76,7 +76,15 @@ jobs:
             x86_64-unknown-linux-musl)  TRIPLE=x86_64-linux-musl ;;
             aarch64-unknown-linux-musl) TRIPLE=aarch64-linux-musl ;;
           esac
-          wget -q "https://musl.cc/${TRIPLE}-cross.tgz"
+          for i in 1 2 3 4 5; do
+            if wget --tries=2 --timeout=120 --retry-connrefused \
+                 "https://musl.cc/${TRIPLE}-cross.tgz" -O "${TRIPLE}-cross.tgz"; then
+              break
+            fi
+            echo "musl.cc download attempt $i failed, retrying..."
+            sleep 10
+          done
+          test -s "${TRIPLE}-cross.tgz" || { echo "Failed to download musl toolchain"; exit 1; }
           sudo tar xzf "${TRIPLE}-cross.tgz" -C /opt
           echo "/opt/${TRIPLE}-cross/bin" >> $GITHUB_PATH
           echo "PCAP_CC=${TRIPLE}-gcc" >> $GITHUB_ENV
