@@ -69,23 +69,20 @@ jobs:
           echo "PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
           echo "LIBPCAP_LIBDIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
 
-      - name: Install musl toolchain (Linux musl x86_64)
-        if: matrix.target == 'x86_64-unknown-linux-musl'
+      - name: Install musl cross toolchain (Linux musl)
+        if: contains(matrix.target, 'linux-musl')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-          echo "PCAP_CC=musl-gcc" >> $GITHUB_ENV
-          echo "PCAP_HOST=x86_64-linux-musl" >> $GITHUB_ENV
-
-      - name: Install musl cross toolchain (Linux musl aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: |
-          wget -q https://musl.cc/aarch64-linux-musl-cross.tgz
-          sudo tar xzf aarch64-linux-musl-cross.tgz -C /opt
-          echo "/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
-          echo "PCAP_CC=aarch64-linux-musl-gcc" >> $GITHUB_ENV
-          echo "PCAP_HOST=aarch64-linux-musl" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc" >> $GITHUB_ENV
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-musl)  TRIPLE=x86_64-linux-musl ;;
+            aarch64-unknown-linux-musl) TRIPLE=aarch64-linux-musl ;;
+          esac
+          wget -q "https://musl.cc/${TRIPLE}-cross.tgz"
+          sudo tar xzf "${TRIPLE}-cross.tgz" -C /opt
+          echo "/opt/${TRIPLE}-cross/bin" >> $GITHUB_PATH
+          echo "PCAP_CC=${TRIPLE}-gcc" >> $GITHUB_ENV
+          echo "PCAP_HOST=${TRIPLE}" >> $GITHUB_ENV
+          CARGO_VAR="CARGO_TARGET_$(echo "${{ matrix.target }}" | tr 'a-z-' 'A-Z_')_LINKER"
+          echo "${CARGO_VAR}=${TRIPLE}-gcc" >> $GITHUB_ENV
 
       - name: Build static libpcap (Linux musl)
         if: contains(matrix.target, 'linux-musl')
