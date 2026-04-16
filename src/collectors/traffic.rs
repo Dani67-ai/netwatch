@@ -69,7 +69,7 @@ impl TrafficCollector {
     pub fn update(&self) {
         if self
             .busy
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
             return;
@@ -84,7 +84,7 @@ impl TrafficCollector {
                 let state = state.lock().unwrap();
                 let elapsed = now.duration_since(state.prev_time).as_secs_f64();
                 if elapsed < 0.01 {
-                    busy.store(false, Ordering::SeqCst);
+                    busy.store(false, Ordering::Release);
                     return;
                 }
                 (
@@ -98,7 +98,7 @@ impl TrafficCollector {
             let current = match platform::collect_interface_stats() {
                 Ok(s) => s,
                 Err(_) => {
-                    busy.store(false, Ordering::SeqCst);
+                    busy.store(false, Ordering::Release);
                     return;
                 }
             };
@@ -153,7 +153,7 @@ impl TrafficCollector {
             state.interfaces = updated;
             state.prev_stats = current;
             state.prev_time = now;
-            busy.store(false, Ordering::SeqCst);
+            busy.store(false, Ordering::Release);
         });
     }
 }
