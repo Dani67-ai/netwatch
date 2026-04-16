@@ -319,7 +319,10 @@ fn parse_linux_connections() -> Vec<Connection> {
             }
 
             let protocol = cols[0].to_uppercase();
-            let state = cols[1].to_string();
+            let state = match cols[1] {
+                "ESTAB" => "ESTABLISHED".to_string(),
+                other => other.to_string(),
+            };
             let local_addr = cols[4].to_string();
             let remote_addr = cols[5].to_string();
 
