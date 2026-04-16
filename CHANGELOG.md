@@ -2,8 +2,12 @@
 
 All notable changes to NetWatch will be documented in this file.
 
-## [Unreleased]
-- Move interface stat collection to a background thread so that netwatch is more responsive on Windows.
+## [0.11.3] - 2026-04-17
+
+### Fixed
+- **Processes tab empty on Linux** — Linux `ss` outputs `ESTAB` instead of `ESTABLISHED`, causing the processes and top connections tabs to show zero entries. The parser now normalizes the state at parse time.
+- **Windows UI responsiveness** — Moved interface stat collection to a background thread so key bindings no longer block for 5–30 seconds on Windows.
+- **Atomic ordering** — Relaxed traffic collector busy-flag from `SeqCst` to `Acquire`/`Release`.
 
 ## [0.10.0] - 2026-04-11
 
