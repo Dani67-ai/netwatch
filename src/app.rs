@@ -761,9 +761,7 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>, remote: Option<&crate::
             AppEvent::Tick => {
                 app.tick();
                 if let Some(publisher) = remote {
-                    let conn_count = app.connection_collector.connections.lock()
-                        .map(|c| c.len()).unwrap_or(0);
-                    publisher.update(&app.traffic.interfaces(), &app.health_prober, conn_count);
+                    publisher.update(&app.traffic.interfaces(), &app.health_prober, &app.connection_collector);
                 }
             }
         }
