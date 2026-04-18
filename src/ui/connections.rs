@@ -79,6 +79,9 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
         conns.retain(|c| matches_filter(c, f));
     }
     let has_rtt_data = conns.iter().any(|c| c.kernel_rtt_us.is_some());
+    let has_rate_data = conns
+        .iter()
+        .any(|c| c.rx_rate.is_some() || c.tx_rate.is_some());
     let has_sparkline_data = !app.rtt_history.is_empty();
 
     let mut header_cells = vec![
@@ -95,6 +98,12 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
         Cell::from(format!("Remote Address{}", sort_indicator(5)))
             .style(Style::default().fg(app.theme.brand).bold()),
     ];
+    if has_rate_data {
+        header_cells.push(
+            Cell::from(format!("Down/Up{}", sort_indicator(6)))
+                .style(Style::default().fg(app.theme.brand).bold()),
+        );
+    }
     if has_rtt_data {
         header_cells.push(Cell::from("RTT").style(Style::default().fg(app.theme.brand).bold()));
     }
@@ -108,20 +117,7 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
     }
     let header = Row::new(header_cells).height(1);
 
-    match app.sort_column {
-        0 => conns.sort_by(|a, b| {
-            a.process_name
-                .as_deref()
-                .unwrap_or("")
-                .cmp(b.process_name.as_deref().unwrap_or(""))
-        }),
-        1 => conns.sort_by(|a, b| a.pid.cmp(&b.pid)),
-        2 => conns.sort_by(|a, b| a.protocol.cmp(&b.protocol)),
-        3 => conns.sort_by(|a, b| a.state.cmp(&b.state)),
-        4 => conns.sort_by(|a, b| a.local_addr.cmp(&b.local_addr)),
-        5 => conns.sort_by(|a, b| a.remote_addr.cmp(&b.remote_addr)),
-        _ => {}
-    }
+    crate::app::sort_connections(&mut conns, app.sort_column);
 
     let visible_rows = area.height.saturating_sub(3) as usize; // borders + header
     let scroll = app
@@ -159,6 +155,30 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(conn.local_addr.clone()),
                 Cell::from(conn.remote_addr.clone()),
             ];
+            if has_rate_data {
+                let (text, style) = match (conn.rx_rate, conn.tx_rate) {
+                    (Some(rx), Some(tx)) => {
+                        let total = rx + tx;
+                        let color = if total > 1_000_000.0 {
+                            app.theme.status_good
+                        } else if total > 10_000.0 {
+                            app.theme.status_warn
+                        } else {
+                            app.theme.text_primary
+                        };
+                        (
+                            format!(
+                                "{}↓/{}↑",
+                                crate::ui::widgets::format_bytes_rate(rx),
+                                crate::ui::widgets::format_bytes_rate(tx),
+                            ),
+                            Style::default().fg(color),
+                        )
+                    }
+                    _ => ("—".to_string(), Style::default().fg(app.theme.text_muted)),
+                };
+                cells.push(Cell::from(text).style(style));
+            }
             if has_rtt_data {
                 let (rtt_text, rtt_style) = match conn.kernel_rtt_us {
                     Some(rtt) if rtt > 100_000.0 => (
@@ -219,6 +239,9 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
         Constraint::Length(22),
         Constraint::Length(22),
     ];
+    if has_rate_data {
+        widths.push(Constraint::Length(20));
+    }
     if has_rtt_data {
         widths.push(Constraint::Length(10));
     }
@@ -499,6 +522,8 @@ mod tests {
             pid: Some(1),
             process_name: Some(proc.into()),
             kernel_rtt_us: None,
+            rx_rate: None,
+            tx_rate: None,
         }
     }
 

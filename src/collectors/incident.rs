@@ -692,6 +692,8 @@ mod tests {
             pid: Some(4242),
             process_name: Some("curl".into()),
             kernel_rtt_us: Some(12_000.0),
+            rx_rate: None,
+            tx_rate: None,
         }
     }
 

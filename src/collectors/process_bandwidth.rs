@@ -103,6 +103,8 @@ mod tests {
             pid: Some(pid),
             process_name: Some(name.into()),
             kernel_rtt_us: None,
+            rx_rate: None,
+            tx_rate: None,
         }
     }
 

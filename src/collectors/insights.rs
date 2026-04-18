@@ -524,6 +524,8 @@ mod tests {
             pid: None,
             process_name: None,
             kernel_rtt_us: None,
+            rx_rate: None,
+            tx_rate: None,
         }
     }
 

@@ -437,6 +437,17 @@ impl StreamTracker {
         self.all_streams.get(index as usize)
     }
 
+    /// Cumulative payload bytes per stream, keyed by canonical `StreamKey`.
+    /// The tuple is `(bytes_a_to_b, bytes_b_to_a)` — direction relative to
+    /// the key's canonical ordering, not the local side. Callers orient
+    /// against the connection's own local address.
+    pub fn snapshot_bytes(&self) -> HashMap<StreamKey, (u64, u64)> {
+        self.all_streams
+            .iter()
+            .map(|s| (s.key.clone(), (s.total_bytes_a_to_b, s.total_bytes_b_to_a)))
+            .collect()
+    }
+
     pub fn clear(&mut self) {
         self.streams.clear();
         self.all_streams.clear();

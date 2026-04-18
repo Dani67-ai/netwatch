@@ -20,6 +20,7 @@ use crate::ui;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 use ratatui::prelude::*;
+use std::sync::Arc;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 
@@ -146,8 +147,6 @@ pub struct App {
     pub connection_filter_active: Option<String>,
     pub export_status: Option<String>,
     export_status_tick: u32,
-    pub bpf_filter_input: bool,
-    pub bpf_filter_text: String,
     pub bpf_filter_active: Option<String>,
     pub incident_recorder: IncidentRecorder,
     pub show_help: bool,
@@ -221,13 +220,21 @@ impl App {
         let mut network_intel = NetworkIntelCollector::new();
         network_intel.set_bandwidth_threshold(user_config.alerts.bandwidth_threshold);
 
+        let mut packet_collector = PacketCollector::new();
+        // Start ambient packet capture so the Connections view can show
+        // per-connection rates. If this fails (no sudo, no interface), the
+        // error surfaces on the Packets tab and rate columns stay blank.
+        packet_collector.start_capture(&capture_interface, bpf_filter_active.as_deref());
+        let connection_collector =
+            ConnectionCollector::new(Arc::clone(&packet_collector.stream_tracker));
+
         Self {
             traffic: TrafficCollector::new(),
             interface_info,
-            connection_collector: ConnectionCollector::new(),
+            connection_collector,
             config_collector,
             health_prober: HealthProber::new(),
-            packet_collector: PacketCollector::new(),
+            packet_collector,
             selected_interface: None,
             paused: false,
             current_tab: user_config.tab(),
@@ -247,8 +254,6 @@ impl App {
             connection_filter_active: None,
             export_status: None,
             export_status_tick: 0,
-            bpf_filter_input: false,
-            bpf_filter_text: user_config.bpf_filter.clone(),
             bpf_filter_active,
             incident_recorder: IncidentRecorder::new(),
             show_help: false,
@@ -958,17 +963,13 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     if app.show_settings {
         return handle_settings_key(app, key);
     }
-    // Text input modes (packet filter, BPF filter)
+    // Text input modes
     if app.packet_filter_input && app.current_tab == Tab::Packets {
         handle_filter_input(app, key);
         return false;
     }
     if app.connection_filter_input && app.current_tab == Tab::Connections {
         handle_connection_filter_input(app, key);
-        return false;
-    }
-    if app.bpf_filter_input && app.current_tab == Tab::Packets {
-        handle_bpf_input(app, key);
         return false;
     }
     handle_main_key(app, key)
@@ -1146,30 +1147,6 @@ fn handle_connection_filter_input(app: &mut App, key: crossterm::event::KeyEvent
     }
 }
 
-fn handle_bpf_input(app: &mut App, key: crossterm::event::KeyEvent) {
-    match key.code {
-        KeyCode::Enter => {
-            app.bpf_filter_input = false;
-            if app.bpf_filter_text.trim().is_empty() {
-                app.bpf_filter_active = None;
-            } else {
-                app.bpf_filter_active = Some(app.bpf_filter_text.clone());
-            }
-        }
-        KeyCode::Esc => {
-            app.bpf_filter_input = false;
-            app.bpf_filter_text = app.bpf_filter_active.clone().unwrap_or_default();
-        }
-        KeyCode::Backspace => {
-            app.bpf_filter_text.pop();
-        }
-        KeyCode::Char(c) => {
-            app.bpf_filter_text.push(c);
-        }
-        _ => {}
-    }
-}
-
 /// Handles keys during normal navigation (no overlay active, no text input mode).
 /// Returns `true` if the application should exit.
 fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
@@ -1298,14 +1275,6 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                 let bpf = app.bpf_filter_active.as_deref();
                 app.packet_collector.start_capture(&iface, bpf);
             }
-        }
-        KeyCode::Char('b')
-            if app.current_tab == Tab::Packets
-                && !app.packet_collector.is_capturing()
-                && !app.stream_view_open =>
-        {
-            app.bpf_filter_input = true;
-            app.bpf_filter_text = app.bpf_filter_active.clone().unwrap_or_default();
         }
         KeyCode::Char('i') if app.current_tab == Tab::Packets => {
             if !app.packet_collector.is_capturing() {
@@ -1455,7 +1424,15 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
         }
         KeyCode::Char('s') => {
             if app.current_tab == Tab::Connections {
-                app.sort_column = (app.sort_column + 1) % 6;
+                // Include the Down/Up sort column (6) only when any
+                // connection has rate data; otherwise wrap back to 0 after 5.
+                let conns = app.connection_collector.connections.lock().unwrap();
+                let has_rate = conns
+                    .iter()
+                    .any(|c| c.rx_rate.is_some() || c.tx_rate.is_some());
+                drop(conns);
+                let modulo = if has_rate { 7 } else { 6 };
+                app.sort_column = (app.sort_column + 1) % modulo;
             }
         }
         KeyCode::Char('t') if app.current_tab == Tab::Timeline => {
@@ -1562,8 +1539,9 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     false
 }
 
-/// Returns connections sorted by `sort_column` (0=process, 1=pid, 2=proto, 3=state, 4=local, 5=remote).
-fn sort_connections(conns: &mut [Connection], sort_column: usize) {
+/// Returns connections sorted by `sort_column`:
+/// 0=process, 1=pid, 2=proto, 3=state, 4=local, 5=remote, 6=rate (rx+tx, descending).
+pub(crate) fn sort_connections(conns: &mut [Connection], sort_column: usize) {
     match sort_column {
         0 => conns.sort_by(|a, b| {
             a.process_name
@@ -1576,6 +1554,12 @@ fn sort_connections(conns: &mut [Connection], sort_column: usize) {
         3 => conns.sort_by(|a, b| a.state.cmp(&b.state)),
         4 => conns.sort_by(|a, b| a.local_addr.cmp(&b.local_addr)),
         5 => conns.sort_by(|a, b| a.remote_addr.cmp(&b.remote_addr)),
+        6 => conns.sort_by(|a, b| {
+            let total = |c: &Connection| c.rx_rate.unwrap_or(0.0) + c.tx_rate.unwrap_or(0.0);
+            total(b)
+                .partial_cmp(&total(a))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }),
         _ => {}
     }
 }

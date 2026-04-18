@@ -741,22 +741,6 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // BPF filter input mode
-    if app.bpf_filter_input {
-        let filter_line = Line::from(vec![
-            Span::styled(" BPF: ", Style::default().fg(Color::Magenta).bold()),
-            Span::raw(&app.bpf_filter_text),
-            Span::styled("█", Style::default().fg(app.theme.text_primary)),
-        ]);
-        let bar = Paragraph::new(filter_line).block(
-            Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(Color::Magenta)),
-        );
-        f.render_widget(bar, area);
-        return;
-    }
-
     let mut hints = if app.stream_view_open {
         vec![
             Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),

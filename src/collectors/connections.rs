@@ -1,3 +1,4 @@
+use crate::collectors::packets::{StreamKey, StreamProtocol, StreamTracker};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
@@ -16,24 +17,138 @@ pub struct Connection {
     pub process_name: Option<String>,
     /// Kernel-measured smoothed RTT in microseconds (from eBPF tcp_probe).
     pub kernel_rtt_us: Option<f64>,
+    /// Inbound (remote→local) payload bytes per second, derived from the
+    /// ambient packet capture. `None` when capture isn't running or the
+    /// connection hasn't been seen on the wire yet.
+    pub rx_rate: Option<f64>,
+    /// Outbound (local→remote) payload bytes per second.
+    pub tx_rate: Option<f64>,
+}
+
+/// Which side of a canonical `StreamKey` the connection's local endpoint sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalSide {
+    A,
+    B,
+}
+
+fn stream_protocol(p: &str) -> Option<StreamProtocol> {
+    let up = p.to_ascii_uppercase();
+    if up.starts_with("TCP") {
+        Some(StreamProtocol::Tcp)
+    } else if up.starts_with("UDP") {
+        Some(StreamProtocol::Udp)
+    } else {
+        None
+    }
+}
+
+fn parse_host_port(addr: &str) -> Option<(String, u16)> {
+    if addr.is_empty() || addr == "*:*" {
+        return None;
+    }
+    // Bracketed IPv6: [::1]:8080
+    if let Some(stripped) = addr.strip_prefix('[') {
+        let bracket_end = stripped.find("]:")?;
+        let ip = normalize_ip(&stripped[..bracket_end]);
+        let port: u16 = stripped[bracket_end + 2..].parse().ok()?;
+        return Some((ip, port));
+    }
+    // Plain IPv4 or unbracketed IPv6 (ss sometimes prints the latter).
+    // The last colon separates port from host.
+    let colon = addr.rfind(':')?;
+    let host = &addr[..colon];
+    if host == "*" || host.is_empty() {
+        return None;
+    }
+    let port: u16 = addr[colon + 1..].parse().ok()?;
+    Some((normalize_ip(host), port))
+}
+
+/// Strip `::ffff:` prefix from IPv4-mapped IPv6 so we match the plain IPv4
+/// addresses packet capture reports.
+fn normalize_ip(ip: &str) -> String {
+    if let Some(rest) = ip.strip_prefix("::ffff:") {
+        if rest.chars().all(|c| c.is_ascii_digit() || c == '.') {
+            return rest.to_string();
+        }
+    }
+    ip.to_string()
+}
+
+pub fn connection_stream_key(conn: &Connection) -> Option<(StreamKey, LocalSide)> {
+    let proto = stream_protocol(&conn.protocol)?;
+    let (l_ip, l_port) = parse_host_port(&conn.local_addr)?;
+    let (r_ip, r_port) = parse_host_port(&conn.remote_addr)?;
+    let key = StreamKey::new(proto, &l_ip, l_port, &r_ip, r_port);
+    let side = if key.addr_a == (l_ip, l_port) {
+        LocalSide::A
+    } else {
+        LocalSide::B
+    };
+    Some((key, side))
+}
+
+/// Holds the previous per-stream byte snapshot so we can compute rates.
+/// Rates are stored in canonical (a_to_b, b_to_a) direction; callers orient
+/// to local using `LocalSide`.
+struct RateState {
+    prev: HashMap<StreamKey, (u64, u64)>,
+    prev_time: Instant,
+    rates: HashMap<StreamKey, (f64, f64)>,
+}
+
+impl RateState {
+    fn new() -> Self {
+        Self {
+            prev: HashMap::new(),
+            prev_time: Instant::now(),
+            rates: HashMap::new(),
+        }
+    }
+
+    /// Diff the current snapshot against the previous one and store per-stream
+    /// rates. Streams present only in the previous snapshot are dropped.
+    fn tick(&mut self, snapshot: HashMap<StreamKey, (u64, u64)>, now: Instant) {
+        let elapsed = now.duration_since(self.prev_time).as_secs_f64();
+        let mut rates = HashMap::with_capacity(snapshot.len());
+        if elapsed >= 0.01 {
+            for (key, &(a, b)) in &snapshot {
+                if let Some(&(pa, pb)) = self.prev.get(key) {
+                    let da = a.saturating_sub(pa) as f64 / elapsed;
+                    let db = b.saturating_sub(pb) as f64 / elapsed;
+                    rates.insert(key.clone(), (da, db));
+                }
+            }
+        }
+        self.rates = rates;
+        self.prev = snapshot;
+        self.prev_time = now;
+    }
+
+    fn rate_for(&self, key: &StreamKey, side: LocalSide) -> Option<(f64, f64)> {
+        self.rates.get(key).map(|&(a_to_b, b_to_a)| match side {
+            // local is A → rx (to A) = b_to_a, tx (from A) = a_to_b
+            LocalSide::A => (b_to_a, a_to_b),
+            LocalSide::B => (a_to_b, b_to_a),
+        })
+    }
 }
 
 pub struct ConnectionCollector {
     pub connections: Arc<Mutex<Vec<Connection>>>,
     busy: Arc<AtomicBool>,
-}
-
-impl Default for ConnectionCollector {
-    fn default() -> Self {
-        Self::new()
-    }
+    stream_tracker: Arc<Mutex<StreamTracker>>,
+    rate_state: Arc<Mutex<RateState>>,
 }
 
 impl ConnectionCollector {
-    pub fn new() -> Self {
+    pub fn new(stream_tracker: Arc<Mutex<StreamTracker>>) -> Self {
         Self {
             connections: Arc::new(Mutex::new(Vec::new())),
             busy: Arc::new(AtomicBool::new(false)),
+            stream_tracker,
+            rate_state: Arc::new(Mutex::new(RateState::new())),
         }
     }
 
@@ -44,15 +159,31 @@ impl ConnectionCollector {
         self.busy.store(true, Ordering::SeqCst);
         let connections = Arc::clone(&self.connections);
         let busy = Arc::clone(&self.busy);
+        let stream_tracker = Arc::clone(&self.stream_tracker);
+        let rate_state = Arc::clone(&self.rate_state);
         thread::spawn(move || {
             #[cfg(target_os = "macos")]
-            let result = parse_lsof();
+            let mut result = parse_lsof();
             #[cfg(target_os = "linux")]
-            let result = parse_linux_connections();
+            let mut result = parse_linux_connections();
             #[cfg(target_os = "windows")]
-            let result = parse_windows_connections();
+            let mut result = parse_windows_connections();
             #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-            let result: Vec<Connection> = Vec::new();
+            let mut result: Vec<Connection> = Vec::new();
+
+            let snapshot = stream_tracker.lock().unwrap().snapshot_bytes();
+            let mut state = rate_state.lock().unwrap();
+            state.tick(snapshot, Instant::now());
+            for conn in &mut result {
+                if let Some((key, side)) = connection_stream_key(conn) {
+                    if let Some((rx, tx)) = state.rate_for(&key, side) {
+                        conn.rx_rate = Some(rx);
+                        conn.tx_rate = Some(tx);
+                    }
+                }
+            }
+            drop(state);
+
             *connections.lock().unwrap() = result;
             busy.store(false, Ordering::SeqCst);
         });
@@ -219,6 +350,8 @@ fn parse_lsof() -> Vec<Connection> {
                 pid,
                 process_name: process_name.clone(),
                 kernel_rtt_us: None,
+                rx_rate: None,
+                tx_rate: None,
             });
             *has_network = false;
         }
@@ -340,6 +473,8 @@ fn parse_linux_connections() -> Vec<Connection> {
                 pid,
                 process_name,
                 kernel_rtt_us: None,
+                rx_rate: None,
+                tx_rate: None,
             });
         }
     }
@@ -478,6 +613,8 @@ fn parse_windows_connections() -> Vec<Connection> {
             process_name: rc.pid.and_then(|p| pid_names.get(&p).cloned()),
             pid: rc.pid,
             kernel_rtt_us: None,
+            rx_rate: None,
+            tx_rate: None,
         })
         .collect()
 }
@@ -548,6 +685,8 @@ mod tests {
             pid: Some(pid),
             process_name: Some("test".into()),
             kernel_rtt_us: None,
+            rx_rate: None,
+            tx_rate: None,
         }
     }
 
@@ -779,5 +918,99 @@ mod tests {
         assert!(lines[0].contains("process,pid,protocol"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_host_port_ipv4() {
+        assert_eq!(
+            parse_host_port("127.0.0.1:8080"),
+            Some(("127.0.0.1".into(), 8080))
+        );
+    }
+
+    #[test]
+    fn parse_host_port_ipv6_bracketed() {
+        assert_eq!(parse_host_port("[::1]:443"), Some(("::1".into(), 443)));
+    }
+
+    #[test]
+    fn parse_host_port_ipv6_unbracketed() {
+        // ss -n occasionally emits unbracketed IPv6 with the last colon as
+        // the port separator.
+        assert_eq!(
+            parse_host_port("fe80::1:22"),
+            Some(("fe80::1".into(), 22))
+        );
+    }
+
+    #[test]
+    fn parse_host_port_wildcard_rejected() {
+        assert_eq!(parse_host_port("*:*"), None);
+        assert_eq!(parse_host_port("*:22"), None);
+        assert_eq!(parse_host_port(""), None);
+    }
+
+    #[test]
+    fn normalize_ipv4_mapped_ipv6() {
+        assert_eq!(normalize_ip("::ffff:1.2.3.4"), "1.2.3.4");
+        // Non-mapped v6 is left untouched.
+        assert_eq!(normalize_ip("::1"), "::1");
+        assert_eq!(normalize_ip("fe80::1"), "fe80::1");
+    }
+
+    #[test]
+    fn connection_stream_key_orients_local() {
+        let conn = make_conn(
+            "TCP",
+            "10.0.0.2:50000",
+            "1.1.1.1:443",
+            "ESTABLISHED",
+            42,
+        );
+        let (key, side) = connection_stream_key(&conn).expect("canonicalized");
+        // StreamKey sorts addr_a <= addr_b. 1.1.1.1 < 10.0.0.2 alphabetically,
+        // so 1.1.1.1 is addr_a and our local (10.0.0.2) is addr_b.
+        assert_eq!(key.addr_a, ("1.1.1.1".into(), 443));
+        assert_eq!(key.addr_b, ("10.0.0.2".into(), 50000));
+        assert_eq!(side, LocalSide::B);
+    }
+
+    #[test]
+    fn connection_stream_key_rejects_udp_with_wildcard_remote() {
+        let conn = make_conn("UDP", "0.0.0.0:53", "*:*", "", 1);
+        assert!(connection_stream_key(&conn).is_none());
+    }
+
+    #[test]
+    fn rate_state_computes_delta() {
+        use std::time::Duration;
+        let key = StreamKey::new(StreamProtocol::Tcp, "1.1.1.1", 443, "10.0.0.2", 50000);
+        let mut state = RateState::new();
+        // First tick establishes the baseline; no rates yet.
+        let t0 = Instant::now();
+        state.prev_time = t0;
+        let mut snap1 = HashMap::new();
+        snap1.insert(key.clone(), (0u64, 0u64));
+        state.tick(snap1, t0 + Duration::from_millis(1));
+        assert!(state.rates.is_empty());
+
+        // Second tick: 1000 bytes a→b, 2000 bytes b→a over 1 second.
+        let mut snap2 = HashMap::new();
+        snap2.insert(key.clone(), (1_000u64, 2_000u64));
+        state.tick(snap2, t0 + Duration::from_millis(1001));
+        let &(a_to_b, b_to_a) = state.rates.get(&key).unwrap();
+        assert!((a_to_b - 1000.0).abs() < 1.0);
+        assert!((b_to_a - 2000.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn rate_state_orients_by_local_side() {
+        let key = StreamKey::new(StreamProtocol::Tcp, "1.1.1.1", 443, "10.0.0.2", 50000);
+        let mut state = RateState::new();
+        state.rates.insert(key.clone(), (1000.0, 2000.0));
+        // Local is addr_a (1.1.1.1): rx = b_to_a = 2000, tx = a_to_b = 1000.
+        assert_eq!(state.rate_for(&key, LocalSide::A), Some((2000.0, 1000.0)));
+        // Local is addr_b (10.0.0.2): rx = a_to_b = 1000, tx = b_to_a = 2000.
+        assert_eq!(state.rate_for(&key, LocalSide::B), Some((1000.0, 2000.0)));
     }
 }

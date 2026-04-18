@@ -152,7 +152,6 @@ fn build_help_lines() -> Vec<Line<'static>> {
         "Recorder arm, freeze, export incident bundle",
     ));
     lines.push(key_line("i", "Cycle capture interface (when stopped)"));
-    lines.push(key_line("b", "Set BPF capture filter (when stopped)"));
     lines.push(key_line("/", "Open display filter bar"));
     lines.push(key_line("Esc", "Clear display filter"));
     lines.push(key_line("s", "Open stream view for selected packet"));

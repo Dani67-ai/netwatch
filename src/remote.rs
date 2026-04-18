@@ -291,6 +291,8 @@ fn collect_disk_usage() -> Vec<serde_json::Value> {
         if parts.len() < 6 { return None; }
         let device = parts[0];
         if device.starts_with("devfs") || device == "map" || device.starts_with("none") { return None; }
+        let mount_hint = parts.last().unwrap_or(&"");
+        if mount_hint.starts_with("/Volumes/") || mount_hint.starts_with("/System/Volumes/") || mount_hint.starts_with("/private/") { return None; }
         let total: u64 = parts[1].parse::<u64>().ok()? * 1024;
         let used: u64 = parts[2].parse::<u64>().ok()? * 1024;
         let available: u64 = parts[3].parse::<u64>().ok()? * 1024;
