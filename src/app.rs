@@ -689,11 +689,6 @@ fn build_connection_filter(conn: &Connection) -> String {
 
     let mut parts = Vec::new();
 
-    let proto = conn.protocol.to_lowercase();
-    if proto == "tcp" || proto == "udp" {
-        parts.push(proto);
-    }
-
     if let Some(ip) = remote_ip {
         parts.push(ip);
     }
