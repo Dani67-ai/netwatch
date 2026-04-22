@@ -2,6 +2,13 @@
 
 All notable changes to NetWatch will be documented in this file.
 
+## [0.13.0] - 2026-04-23
+
+### Added
+- **Per-tab sort picker** — Press `s` on Dashboard, Connections, Interfaces, or Processes to open a sort picker overlay. Navigate with `↑↓` or `j/k`, `Enter` to apply, `S` to toggle ascending/descending, `/` to filter columns by name, `Esc` or `s` to close. Each tab remembers its own sort state. Dashboard and Interfaces sort once at render so the sparkline and the table stay index-aligned. #20, #21
+- **Comprehensive sort test coverage** — ~38 new tests covering per-tab sort integration, `cmp_ip_addr` (IPv4/IPv6/brackets/wildcards/port tiebreakers), `cmp_f64` (NaN-safe via `total_cmp`), case-insensitive comparators, picker cursor/filter edge cases, and meta-tests that fail CI if a new column is added without a matching comparator arm. #22
+- **Vim-style navigation keys** — `j`/`k` alias `↓`/`↑` for list/stream/help/settings scrolling; `h`/`l` alias `←`/`→` for settings theme and default-tab selectors. Arrow keys continue to work unchanged. Stream view's existing `h` (toggle hex/text mode) is preserved. Fixes #18.
+
 ## [0.12.5] - 2026-04-21
 
 ### Changed
