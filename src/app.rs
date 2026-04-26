@@ -75,6 +75,170 @@ pub enum StreamDirectionFilter {
     BtoA,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineFilter {
+    All,
+    Crit,
+    Warn,
+    Conn,
+    Dns,
+    Rtt,
+    Iface,
+}
+
+impl TimelineFilter {
+    pub fn label(self) -> &'static str {
+        match self {
+            TimelineFilter::All => "all",
+            TimelineFilter::Crit => "crit",
+            TimelineFilter::Warn => "warn",
+            TimelineFilter::Conn => "conn",
+            TimelineFilter::Dns => "dns",
+            TimelineFilter::Rtt => "rtt",
+            TimelineFilter::Iface => "iface",
+        }
+    }
+
+    pub fn cycle(self) -> Self {
+        match self {
+            TimelineFilter::All => TimelineFilter::Crit,
+            TimelineFilter::Crit => TimelineFilter::Warn,
+            TimelineFilter::Warn => TimelineFilter::Conn,
+            TimelineFilter::Conn => TimelineFilter::Dns,
+            TimelineFilter::Dns => TimelineFilter::Rtt,
+            TimelineFilter::Rtt => TimelineFilter::Iface,
+            TimelineFilter::Iface => TimelineFilter::All,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatsRange {
+    Min1,
+    Min5,
+    Min15,
+    Hour1,
+    Hour24,
+    Session,
+}
+
+impl StatsRange {
+    pub fn label(self) -> &'static str {
+        match self {
+            StatsRange::Min1 => "1m",
+            StatsRange::Min5 => "5m",
+            StatsRange::Min15 => "15m",
+            StatsRange::Hour1 => "1h",
+            StatsRange::Hour24 => "24h",
+            StatsRange::Session => "session",
+        }
+    }
+
+    pub fn cycle(self) -> Self {
+        match self {
+            StatsRange::Min1 => StatsRange::Min5,
+            StatsRange::Min5 => StatsRange::Min15,
+            StatsRange::Min15 => StatsRange::Hour1,
+            StatsRange::Hour1 => StatsRange::Hour24,
+            StatsRange::Hour24 => StatsRange::Session,
+            StatsRange::Session => StatsRange::Min1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionStateFilter {
+    All,
+    Established,
+    Listen,
+    TimeWait,
+}
+
+impl ConnectionStateFilter {
+    pub fn label(self) -> &'static str {
+        match self {
+            ConnectionStateFilter::All => "all",
+            ConnectionStateFilter::Established => "established",
+            ConnectionStateFilter::Listen => "listen",
+            ConnectionStateFilter::TimeWait => "time-wait",
+        }
+    }
+
+    pub fn cycle(self) -> Self {
+        match self {
+            ConnectionStateFilter::All => ConnectionStateFilter::Established,
+            ConnectionStateFilter::Established => ConnectionStateFilter::Listen,
+            ConnectionStateFilter::Listen => ConnectionStateFilter::TimeWait,
+            ConnectionStateFilter::TimeWait => ConnectionStateFilter::All,
+        }
+    }
+
+    pub fn matches(self, state: &str) -> bool {
+        match self {
+            ConnectionStateFilter::All => true,
+            ConnectionStateFilter::Established => state == "ESTABLISHED",
+            ConnectionStateFilter::Listen => state == "LISTEN",
+            ConnectionStateFilter::TimeWait => state == "TIME_WAIT" || state == "TIME-WAIT",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionGroup {
+    Process,
+    Remote,
+    None,
+}
+
+impl ConnectionGroup {
+    pub fn label(self) -> &'static str {
+        match self {
+            ConnectionGroup::Process => "process",
+            ConnectionGroup::Remote => "remote",
+            ConnectionGroup::None => "none",
+        }
+    }
+
+    pub fn cycle(self) -> Self {
+        match self {
+            ConnectionGroup::Process => ConnectionGroup::Remote,
+            ConnectionGroup::Remote => ConnectionGroup::None,
+            ConnectionGroup::None => ConnectionGroup::Process,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterfaceFilter {
+    Active,
+    All,
+    Wifi,
+    Vpn,
+    Idle,
+}
+
+impl InterfaceFilter {
+    pub fn label(self) -> &'static str {
+        match self {
+            InterfaceFilter::Active => "active",
+            InterfaceFilter::All => "all",
+            InterfaceFilter::Wifi => "wifi",
+            InterfaceFilter::Vpn => "vpn",
+            InterfaceFilter::Idle => "idle",
+        }
+    }
+
+    pub fn cycle(self) -> Self {
+        match self {
+            InterfaceFilter::Active => InterfaceFilter::All,
+            InterfaceFilter::All => InterfaceFilter::Wifi,
+            InterfaceFilter::Wifi => InterfaceFilter::Vpn,
+            InterfaceFilter::Vpn => InterfaceFilter::Idle,
+            InterfaceFilter::Idle => InterfaceFilter::Active,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Tab {
     Dashboard,
@@ -150,6 +314,12 @@ pub struct App {
     pub health_prober: HealthProber,
     pub packet_collector: PacketCollector,
     pub selected_interface: Option<usize>,
+    pub interface_filter: InterfaceFilter,
+    pub connection_state_filter: ConnectionStateFilter,
+    pub connection_group: ConnectionGroup,
+    pub stats_range: StatsRange,
+    pub timeline_filter: TimelineFilter,
+    pub session_started_at: std::time::Instant,
     pub paused: bool,
     pub current_tab: Tab,
     pub scroll: UiScrollState,
@@ -193,6 +363,18 @@ pub struct App {
     pub last_area: Rect,
     /// Per-remote-IP RTT history for sparklines (keyed by remote IP string)
     pub rtt_history: HashMap<String, VecDeque<f64>>,
+    /// Rolling RX rate history per grouped (process, host) for the Dashboard
+    /// Top Connections sparkline. Updated each connection-collector tick.
+    pub top_conn_history: HashMap<(String, String), VecDeque<u64>>,
+    /// Rolling RX rate history per (process, pid) for the Process drill-in
+    /// chart. Updated each connection-collector tick.
+    pub top_proc_rx_history: HashMap<(String, Option<u32>), VecDeque<u64>>,
+    /// Recent interface up/down/IP-changed events surfaced on the Timeline tab.
+    /// Populated when info_tick detects a delta from the previous snapshot.
+    pub iface_events: VecDeque<IfaceChangeEvent>,
+    /// Snapshot of the previous interface_info, used to detect changes on the
+    /// next info_tick. Empty until the second info refresh.
+    prev_interface_info: Vec<InterfaceInfo>,
     rtt_sampled_streams: HashSet<u32>,
     pub theme: Theme,
     pub process_bandwidth: ProcessBandwidthCollector,
@@ -258,6 +440,12 @@ impl App {
             health_prober: HealthProber::new(),
             packet_collector,
             selected_interface: None,
+            interface_filter: InterfaceFilter::Active,
+            connection_state_filter: ConnectionStateFilter::All,
+            connection_group: ConnectionGroup::Process,
+            stats_range: StatsRange::Session,
+            timeline_filter: TimelineFilter::All,
+            session_started_at: std::time::Instant::now(),
             paused: false,
             current_tab: user_config.tab(),
             scroll: UiScrollState::default(),
@@ -299,6 +487,10 @@ impl App {
             user_config,
             last_area: Rect::default(),
             rtt_history: HashMap::new(),
+            top_conn_history: HashMap::new(),
+            top_proc_rx_history: HashMap::new(),
+            iface_events: VecDeque::new(),
+            prev_interface_info: Vec::new(),
             rtt_sampled_streams: HashSet::new(),
             theme,
             process_bandwidth: ProcessBandwidthCollector::new(),
@@ -526,6 +718,10 @@ impl App {
         if self.info_tick >= 10 {
             self.info_tick = 0;
             if let Ok(info) = platform::collect_interface_info() {
+                if !self.prev_interface_info.is_empty() {
+                    diff_interfaces(&self.prev_interface_info, &info, &mut self.iface_events);
+                }
+                self.prev_interface_info = info.clone();
                 self.interface_info = info;
             }
             self.config_collector.update();
@@ -540,6 +736,8 @@ impl App {
             self.connection_timeline.update(&conns);
             let interfaces = self.traffic.interfaces();
             self.process_bandwidth.update(&conns, &interfaces);
+            update_top_conn_history(&mut self.top_conn_history, &conns);
+            update_top_proc_rx_history(&mut self.top_proc_rx_history, &conns);
         }
 
         // Drain eBPF connection events and update RTT monitor
@@ -586,13 +784,14 @@ impl App {
             self.freeze_incident_recorder(&reason);
         }
 
-        // Refresh health every ~5 ticks (5s)
+        // Refresh health every ~5 ticks (5s) — and piggyback the CPU% sampler.
         self.health_tick += 1;
         if self.health_tick >= 5 {
             self.health_tick = 0;
             let gateway = self.config_collector.config.gateway.clone();
             let dns = self.config_collector.config.dns_servers.first().cloned();
             self.health_prober.probe(gateway.as_deref(), dns.as_deref());
+            self.process_bandwidth.refresh_cpu();
         }
 
         // Feed AI insights collector with a fresh network snapshot
@@ -764,6 +963,9 @@ pub async fn run<B: Backend>(
     let gateway = app.config_collector.config.gateway.clone();
     let dns = app.config_collector.config.dns_servers.first().cloned();
     app.health_prober.probe(gateway.as_deref(), dns.as_deref());
+    // Kick off a one-shot traceroute so the topology view's ISP gateway hop
+    // is populated without requiring the user to press T first.
+    app.traceroute_runner.run("1.1.1.1");
 
     // Event loop design:
     //   1. Render  — draw current app state to the terminal
@@ -833,6 +1035,165 @@ pub async fn run<B: Backend>(
 /// `max` is the highest allowed index (inclusive).
 fn clamp_scroll(current: usize, delta: isize, max: usize) -> usize {
     ((current as isize + delta).max(0) as usize).min(max)
+}
+
+const TOP_CONN_HISTORY_LEN: usize = 30;
+
+/// Capture this tick's per-(process, host) RX rate into the rolling history
+/// used by the Dashboard's Top Connections sparkline. Evicts groups that
+/// disappear from the connection list to keep the map bounded.
+fn update_top_conn_history(
+    history: &mut HashMap<(String, String), VecDeque<u64>>,
+    conns: &[Connection],
+) {
+    let mut current_groups: HashMap<(String, String), f64> = HashMap::new();
+    for c in conns {
+        if c.state == "LISTEN" || c.state == "CLOSED" || c.remote_addr.is_empty() {
+            continue;
+        }
+        let proc = c.process_name.clone().unwrap_or_else(|| "—".into());
+        let host = top_conn_host(&c.remote_addr);
+        let entry = current_groups.entry((proc, host)).or_insert(0.0);
+        *entry += c.rx_rate.unwrap_or(0.0);
+    }
+
+    history.retain(|k, _| current_groups.contains_key(k));
+
+    for (key, rate) in current_groups {
+        let buf = history.entry(key).or_default();
+        buf.push_back(rate.round() as u64);
+        if buf.len() > TOP_CONN_HISTORY_LEN {
+            buf.pop_front();
+        }
+    }
+}
+
+/// Strip the trailing :port from a remote_addr; preserves IPv6 brackets.
+/// Must match the grouping key used in `dashboard::render_top_connections`.
+fn top_conn_host(addr: &str) -> String {
+    if let Some(stripped) = addr.strip_prefix('[') {
+        if let Some(end) = stripped.find("]:") {
+            return format!("[{}]", &stripped[..end]);
+        }
+    }
+    if let Some(colon) = addr.rfind(':') {
+        addr[..colon].to_string()
+    } else {
+        addr.to_string()
+    }
+}
+
+const TOP_PROC_HISTORY_LEN: usize = 60;
+const IFACE_EVENTS_CAP: usize = 200;
+
+#[derive(Debug, Clone)]
+pub struct IfaceChangeEvent {
+    pub when: std::time::Instant,
+    pub name: String,
+    pub kind: IfaceChangeKind,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IfaceChangeKind {
+    Up,
+    Down,
+    IpChanged,
+    Added,
+    Removed,
+}
+
+/// Capture per-(process, pid) RX rate into a rolling 60-sample history used by
+/// the Process drill-in chart. Mirrors update_top_conn_history but keyed by pid.
+fn update_top_proc_rx_history(
+    history: &mut HashMap<(String, Option<u32>), VecDeque<u64>>,
+    conns: &[Connection],
+) {
+    let mut current: HashMap<(String, Option<u32>), f64> = HashMap::new();
+    for c in conns {
+        if c.state != "ESTABLISHED" {
+            continue;
+        }
+        let name = c
+            .process_name
+            .clone()
+            .unwrap_or_else(|| format!("pid:{}", c.pid.unwrap_or(0)));
+        let entry = current.entry((name, c.pid)).or_insert(0.0);
+        *entry += c.rx_rate.unwrap_or(0.0);
+    }
+    history.retain(|k, _| current.contains_key(k));
+    for (key, rate) in current {
+        let buf = history.entry(key).or_default();
+        buf.push_back(rate.round() as u64);
+        if buf.len() > TOP_PROC_HISTORY_LEN {
+            buf.pop_front();
+        }
+    }
+}
+
+/// Diff a refreshed `interface_info` snapshot against the previous one and
+/// append change events. Caller is responsible for swapping `prev` with the
+/// new snapshot afterwards.
+fn diff_interfaces(
+    prev: &[InterfaceInfo],
+    curr: &[InterfaceInfo],
+    events: &mut VecDeque<IfaceChangeEvent>,
+) {
+    use std::collections::HashSet;
+    let now = std::time::Instant::now();
+    let prev_names: HashSet<&str> = prev.iter().map(|i| i.name.as_str()).collect();
+    let curr_names: HashSet<&str> = curr.iter().map(|i| i.name.as_str()).collect();
+
+    for iface in curr {
+        if !prev_names.contains(iface.name.as_str()) {
+            events.push_back(IfaceChangeEvent {
+                when: now,
+                name: iface.name.clone(),
+                kind: IfaceChangeKind::Added,
+                detail: iface.ipv4.clone().unwrap_or_else(|| "—".into()),
+            });
+            continue;
+        }
+        let p = prev.iter().find(|i| i.name == iface.name).unwrap();
+        if p.is_up != iface.is_up {
+            events.push_back(IfaceChangeEvent {
+                when: now,
+                name: iface.name.clone(),
+                kind: if iface.is_up {
+                    IfaceChangeKind::Up
+                } else {
+                    IfaceChangeKind::Down
+                },
+                detail: iface.ipv4.clone().unwrap_or_default(),
+            });
+        }
+        if p.ipv4 != iface.ipv4 {
+            events.push_back(IfaceChangeEvent {
+                when: now,
+                name: iface.name.clone(),
+                kind: IfaceChangeKind::IpChanged,
+                detail: format!(
+                    "{} → {}",
+                    p.ipv4.clone().unwrap_or_else(|| "—".into()),
+                    iface.ipv4.clone().unwrap_or_else(|| "—".into())
+                ),
+            });
+        }
+    }
+    for iface in prev {
+        if !curr_names.contains(iface.name.as_str()) {
+            events.push_back(IfaceChangeEvent {
+                when: now,
+                name: iface.name.clone(),
+                kind: IfaceChangeKind::Removed,
+                detail: String::new(),
+            });
+        }
+    }
+
+    while events.len() > IFACE_EVENTS_CAP {
+        events.pop_front();
+    }
 }
 
 fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
@@ -978,8 +1339,8 @@ fn scroll_tab(app: &mut App, delta: isize) {
                 app.scroll.traceroute_scroll =
                     clamp_scroll(app.scroll.traceroute_scroll, delta, usize::MAX);
             } else {
-                app.scroll.topology_scroll =
-                    clamp_scroll(app.scroll.topology_scroll, delta, usize::MAX);
+                let max = top_remote_ips(app).len().saturating_sub(1);
+                app.scroll.topology_scroll = clamp_scroll(app.scroll.topology_scroll, delta, max);
             }
         }
         Tab::Timeline => {
@@ -994,7 +1355,7 @@ fn scroll_tab(app: &mut App, delta: isize) {
             app.scroll.insights_scroll =
                 clamp_scroll(app.scroll.insights_scroll, delta, usize::MAX);
         }
-        Tab::Dashboard | Tab::Interfaces => {
+        Tab::Interfaces => {
             let max = app.traffic.interface_count().saturating_sub(1);
             app.selected_interface = match (app.selected_interface, delta < 0) {
                 (Some(0) | None, true) => None,
@@ -1002,6 +1363,7 @@ fn scroll_tab(app: &mut App, delta: isize) {
                 (Some(i), _) => Some(clamp_scroll(i, delta, max)),
             };
         }
+        Tab::Dashboard => {}
     }
 }
 
@@ -1262,7 +1624,7 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
             app.scroll.help_scroll = 0;
         }
         KeyCode::Char('g') => app.show_geo = !app.show_geo,
-        KeyCode::Char('t') if app.current_tab != Tab::Timeline => {
+        KeyCode::Char('t') if app.current_tab != Tab::Timeline && app.current_tab != Tab::Stats => {
             let names = crate::theme::THEME_NAMES;
             let current = names.iter().position(|&n| n == app.theme.name).unwrap_or(0);
             let next = (current + 1) % names.len();
@@ -1431,6 +1793,31 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
         }
         KeyCode::Char('f') if app.current_tab == Tab::Packets => {
             app.packet_follow = !app.packet_follow;
+        }
+        KeyCode::Char('f') if app.current_tab == Tab::Interfaces => {
+            app.interface_filter = app.interface_filter.cycle();
+            app.selected_interface = None;
+        }
+        KeyCode::Char('f')
+            if app.current_tab == Tab::Connections
+                && !app.connection_filter_input
+                && !app.traceroute_view_open =>
+        {
+            app.connection_state_filter = app.connection_state_filter.cycle();
+            app.scroll.connection_scroll = 0;
+        }
+        KeyCode::Char('G')
+            if app.current_tab == Tab::Connections
+                && !app.connection_filter_input
+                && !app.traceroute_view_open =>
+        {
+            app.connection_group = app.connection_group.cycle();
+        }
+        KeyCode::Char('t') if app.current_tab == Tab::Stats => {
+            app.stats_range = app.stats_range.cycle();
+        }
+        KeyCode::Char('f') if app.current_tab == Tab::Timeline => {
+            app.timeline_filter = app.timeline_filter.cycle();
         }
         KeyCode::Char('w') if app.current_tab == Tab::Packets => {
             use crate::collectors::packets::{export_pcap, matches_packet, parse_filter};
@@ -1613,16 +2000,14 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                 app.current_tab = Tab::Connections;
             }
         }
-        KeyCode::Char('T') if app.current_tab == Tab::Topology && !app.traceroute_view_open => {
+        KeyCode::Char('T') if app.current_tab == Tab::Topology => {
             let remote_ips = top_remote_ips(app);
             if let Some((ip, _)) = remote_ips.get(app.scroll.topology_scroll) {
                 app.traceroute_runner.run(ip);
-                app.traceroute_view_open = true;
                 app.scroll.traceroute_scroll = 0;
             }
         }
-        KeyCode::Esc if app.current_tab == Tab::Topology && app.traceroute_view_open => {
-            app.traceroute_view_open = false;
+        KeyCode::Esc if app.current_tab == Tab::Topology => {
             app.traceroute_runner.clear();
         }
         KeyCode::Enter if app.current_tab == Tab::Packets => {
@@ -1665,17 +2050,48 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
 
 /// Returns remote IPs ranked by connection count, used by Topology tab actions.
 fn top_remote_ips(app: &App) -> Vec<(String, usize)> {
-    let mut counts: HashMap<String, usize> = HashMap::new();
+    // Mirrors build_remote_nodes() in src/ui/topology.rs: partition local vs.
+    // public, then sort each by (has_established desc, conn_count desc,
+    // DNS-label asc). The third key MUST match the renderer's, otherwise the
+    // cursor index and the IP returned here can disagree whenever DNS
+    // resolves a tied row to a name that orders differently from its IP.
+    let mut acc: HashMap<String, (String, usize, bool)> = HashMap::new();
     let conns = app.connection_collector.connections.lock().unwrap();
     for conn in conns.iter() {
         let (remote_ip, _) = parse_addr_parts(&conn.remote_addr);
         if let Some(ip) = remote_ip {
-            *counts.entry(ip).or_insert(0) += 1;
+            let entry = acc.entry(ip.clone()).or_insert_with(|| {
+                let label = app
+                    .packet_collector
+                    .dns_cache
+                    .lookup(&ip)
+                    .unwrap_or_else(|| ip.clone());
+                (label, 0, false)
+            });
+            entry.1 += 1;
+            if conn.state == "ESTABLISHED" {
+                entry.2 = true;
+            }
         }
     }
-    let mut remote_ips: Vec<(String, usize)> = counts.into_iter().collect();
-    remote_ips.sort_by(|a, b| b.1.cmp(&a.1));
-    remote_ips
+    let (mut local, mut public): (Vec<_>, Vec<_>) = acc
+        .into_iter()
+        .map(|(ip, (label, count, est))| (ip, label, count, est))
+        .partition(|(ip, _, _, _)| crate::collectors::geo::is_private_ip(ip));
+    let sort = |v: &mut Vec<(String, String, usize, bool)>| {
+        v.sort_by(|a, b| {
+            b.3.cmp(&a.3)
+                .then_with(|| b.2.cmp(&a.2))
+                .then_with(|| a.1.cmp(&b.1))
+        });
+    };
+    sort(&mut local);
+    sort(&mut public);
+    local
+        .into_iter()
+        .chain(public.into_iter())
+        .map(|(ip, _, count, _)| (ip, count))
+        .collect()
 }
 #[cfg(test)]
 pub(crate) fn sort_connections(conns: &mut [Connection], column: usize) {
@@ -1904,12 +2320,7 @@ mod tests {
 
     #[test]
     fn each_sortable_tab_has_keys() {
-        let sortable = [
-            Tab::Dashboard,
-            Tab::Connections,
-            Tab::Interfaces,
-            Tab::Processes,
-        ];
+        let sortable = [Tab::Connections, Tab::Interfaces, Tab::Processes];
         for tab in &sortable {
             assert!(
                 !sort_columns_for_tab(*tab).is_empty(),
@@ -1921,7 +2332,10 @@ mod tests {
 
     #[test]
     fn non_sortable_tabs_have_no_keys() {
+        // Dashboard was reduced to a non-tabular landing view in the redesign,
+        // so it now has no sort columns either.
         let non_sortable = [
+            Tab::Dashboard,
             Tab::Packets,
             Tab::Stats,
             Tab::Topology,
@@ -1940,14 +2354,16 @@ mod tests {
     #[test]
     fn default_sort_column_is_zero() {
         for (tab, state) in &default_sort_states() {
-            if *tab == Tab::Processes {
-                // processes default to "Total Rate" (column 5) descending
-                assert_eq!(
+            match tab {
+                Tab::Processes => assert_eq!(
                     state.column, 5,
                     "Processes default column should be 5 (Total Rate)"
-                );
-            } else {
-                assert_eq!(state.column, 0, "{:?} default column should be 0", tab);
+                ),
+                Tab::Interfaces => assert_eq!(
+                    state.column, 3,
+                    "Interfaces default column should be 3 (RX/s)"
+                ),
+                _ => assert_eq!(state.column, 0, "{:?} default column should be 0", tab),
             }
         }
     }
@@ -1955,11 +2371,13 @@ mod tests {
     #[test]
     fn default_sort_states_are_ascending() {
         for (tab, state) in &default_sort_states() {
-            if *tab == Tab::Processes {
-                // processes default to descending (top bandwidth first)
-                assert!(!state.ascending, "Processes default should be descending");
-            } else {
-                assert!(state.ascending, "{:?} default should be ascending", tab);
+            match tab {
+                Tab::Processes | Tab::Interfaces => assert!(
+                    !state.ascending,
+                    "{:?} default should be descending (top traffic first)",
+                    tab
+                ),
+                _ => assert!(state.ascending, "{:?} default should be ascending", tab),
             }
         }
     }
@@ -2064,8 +2482,8 @@ mod tests {
         ];
         crate::ui::interfaces::sort_interfaces(
             &mut ifaces,
-            Tab::Dashboard,
-            col(Tab::Dashboard, "Interface"),
+            Tab::Interfaces,
+            col(Tab::Interfaces, "Iface"),
             true,
             &[],
         );
@@ -2082,59 +2500,13 @@ mod tests {
         ];
         crate::ui::interfaces::sort_interfaces(
             &mut ifaces,
-            Tab::Dashboard,
-            col(Tab::Dashboard, "Rx Rate"),
+            Tab::Interfaces,
+            col(Tab::Interfaces, "RX/s"),
             false,
             &[],
         );
         let rates: Vec<f64> = ifaces.iter().map(|i| i.rx_rate).collect();
         assert_eq!(rates, vec![500.0, 200.0, 100.0]);
-    }
-
-    #[test]
-    fn sort_interfaces_by_status_with_info() {
-        use crate::platform::InterfaceInfo;
-        let info = vec![
-            InterfaceInfo {
-                name: "en0".into(),
-                ipv4: None,
-                ipv6: None,
-                mac: None,
-                mtu: None,
-                is_up: true,
-            },
-            InterfaceInfo {
-                name: "en1".into(),
-                ipv4: None,
-                ipv6: None,
-                mac: None,
-                mtu: None,
-                is_up: false,
-            },
-            InterfaceInfo {
-                name: "lo0".into(),
-                ipv4: None,
-                ipv6: None,
-                mac: None,
-                mtu: None,
-                is_up: true,
-            },
-        ];
-        let mut ifaces = vec![
-            iface("en1", 0.0, 0.0),
-            iface("en0", 0.0, 0.0),
-            iface("lo0", 0.0, 0.0),
-        ];
-        crate::ui::interfaces::sort_interfaces(
-            &mut ifaces,
-            Tab::Dashboard,
-            col(Tab::Dashboard, "Status"),
-            true,
-            &info,
-        );
-        let names: Vec<_> = ifaces.iter().map(|i| i.name.as_str()).collect();
-        // is_up=false sorts before is_up=true in ascending
-        assert_eq!(names[0], "en1");
     }
 
     #[test]
@@ -2185,9 +2557,12 @@ mod tests {
     #[test]
     fn every_interfaces_column_has_a_comparator() {
         use crate::platform::InterfaceInfo;
+        // Names chosen so role_for() produces distinct roles ("wifi" vs.
+        // "loopback") — otherwise the Role column would tie and the
+        // comparator-presence assertion below would fail spuriously.
         let info = vec![
             InterfaceInfo {
-                name: "zz".into(),
+                name: "en0".into(),
                 ipv4: Some("10.0.0.1".into()),
                 ipv6: Some("fe80::2".into()),
                 mac: Some("ff:ff:ff:ff:ff:ff".into()),
@@ -2195,7 +2570,7 @@ mod tests {
                 is_up: true,
             },
             InterfaceInfo {
-                name: "aa".into(),
+                name: "lo0".into(),
                 ipv4: Some("1.2.3.4".into()),
                 ipv6: Some("fe80::1".into()),
                 mac: Some("00:00:00:00:00:00".into()),
@@ -2204,12 +2579,16 @@ mod tests {
             },
         ];
         let make = || {
-            let mut a = iface("zz", 500.0, 500.0);
+            let mut a = iface("en0", 500.0, 500.0);
+            a.rx_bytes_total = 10_000;
+            a.tx_bytes_total = 10_000;
             a.rx_packets = 1000;
             a.tx_packets = 1000;
             a.rx_errors = 10;
             a.tx_errors = 10;
-            let mut b = iface("aa", 100.0, 100.0);
+            let mut b = iface("lo0", 100.0, 100.0);
+            b.rx_bytes_total = 1_000;
+            b.tx_bytes_total = 1_000;
             b.rx_packets = 100;
             b.tx_packets = 100;
             b.rx_errors = 1;
@@ -2245,6 +2624,8 @@ mod tests {
                     tx_rate: 500.0,
                     rx_bytes: 10000,
                     tx_bytes: 10000,
+                    rtt_ms: Some(50.0),
+                    cpu_percent: Some(25.0),
                 },
                 ProcessBandwidth {
                     process_name: "aa".into(),
@@ -2254,6 +2635,8 @@ mod tests {
                     tx_rate: 50.0,
                     rx_bytes: 1000,
                     tx_bytes: 1000,
+                    rtt_ms: Some(10.0),
+                    cpu_percent: Some(5.0),
                 },
             ]
         };
@@ -2287,6 +2670,8 @@ mod tests {
                 tx_rate: 0.0,
                 rx_bytes: 0,
                 tx_bytes: 0,
+                rtt_ms: None,
+                cpu_percent: None,
             },
             ProcessBandwidth {
                 process_name: "Apple".into(),
@@ -2296,6 +2681,8 @@ mod tests {
                 tx_rate: 0.0,
                 rx_bytes: 0,
                 tx_bytes: 0,
+                rtt_ms: None,
+                cpu_percent: None,
             },
             ProcessBandwidth {
                 process_name: "brave".into(),
@@ -2305,6 +2692,8 @@ mod tests {
                 tx_rate: 0.0,
                 rx_bytes: 0,
                 tx_bytes: 0,
+                rtt_ms: None,
+                cpu_percent: None,
             },
         ];
         crate::ui::processes::sort(&mut procs, col(Tab::Processes, "Process"), true);
@@ -2323,6 +2712,8 @@ mod tests {
                 tx_rate: 50.0,
                 rx_bytes: 0,
                 tx_bytes: 0,
+                rtt_ms: None,
+                cpu_percent: None,
             },
             ProcessBandwidth {
                 process_name: "b".into(),
@@ -2332,6 +2723,8 @@ mod tests {
                 tx_rate: 500.0,
                 rx_bytes: 0,
                 tx_bytes: 0,
+                rtt_ms: None,
+                cpu_percent: None,
             },
         ];
         crate::ui::processes::sort(&mut procs, col(Tab::Processes, "Total Rate"), false);
