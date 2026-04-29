@@ -11,62 +11,38 @@ Set TypingSpeed 30ms
 Set Framerate 18
 Set Padding 10
 
-# Launch hidden: generate HTTP/TLS traffic in the background and start NetWatch with capture privileges
+# Background HTTP/TLS traffic so dashboards have something to show; launch netwatch with capture privileges.
 Hide
 Type "bash -lc 'while true; do curl -I http://example.com >/dev/null 2>&1; curl -I https://example.com >/dev/null 2>&1; sleep 0.8; done & echo $NETWATCH_DEMO_PASSWORD | sudo -S ./target/release/netwatch'"
 Enter
-Sleep 4s
+Sleep 6s
 Show
 
-# Dashboard: instant visibility
-Sleep 2s
+# Dashboard — KPIs, throughput sparkline filling the full window, top connections.
+Sleep 5s
 
-# Arm the flight recorder, but keep focus on the whole product
-Type "R"
-Sleep 1s
-
-# Connections: who owns the traffic?
+# Connections — filter chips, real-time RX/TX, sortable columns.
 Type "2"
-Sleep 2s
-
-# Packets: live capture, stream view, display filter, pcap export
-Type "4"
 Sleep 3s
-Down 2
-Sleep 300ms
-Enter
-Sleep 500ms
-Type "s"
-Sleep 2s
-Type "h"
-Sleep 1s
-Escape
-Sleep 500ms
-Type "/"
-Sleep 300ms
-Type "dns"
-Enter
-Sleep 1500ms
-Escape
-Sleep 500ms
-Type "w"
-Sleep 1500ms
 
-# Topology: network map and remote hosts
+# Topology — v0.14 redesign: locals on the left, public peers on the right,
+# health dots on the trunks to ROUTER and ISP. Auto-traceroute fills the hop
+# table without a keypress.
 Type "6"
-Sleep 2500ms
+Sleep 4s
 
-# Processes: which apps are driving traffic?
+# Processes — per-process kernel RTT and CPU% with rolling history.
 Type "8"
-Sleep 2500ms
+Sleep 3s
 
-# Back to dashboard and freeze/export the captured incident window
+# Timeline — RTT spike and interface flap detectors as discrete events.
+Type "7"
+Sleep 3s
+
+# Back to dashboard for the loop tail.
 Type "1"
-Sleep 1500ms
-Type "F"
-Sleep 800ms
-Type "E"
 Sleep 2s
 
+Hide
 Type "q"
 Sleep 500ms

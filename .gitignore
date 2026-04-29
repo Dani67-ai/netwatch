@@ -5,6 +5,7 @@ Roadmap*.md
 SPEC-*.md
 comparison.md
 demo-linkedin.*
+*.mov
 
 # vhs intermediate output (we keep the screenshots, not the .gif)
 screenshots/.vhs-trash.gif

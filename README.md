@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="demo.gif" alt="NetWatch — Dashboard, Connections, Packets, Topology" width="800">
+  <img src="demo.gif" alt="NetWatch — Dashboard, Connections, Topology, Processes, Timeline" width="800">
 </p>
 
 <p align="center">
