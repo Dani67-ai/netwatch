@@ -1167,9 +1167,14 @@ fn trend_for_throughput(history: &[u64], _app: &App) -> TrendDisplay {
     if history.len() < 4 {
         return TrendDisplay::neutral();
     }
-    let mid = history.len() / 2;
-    let older: u64 = history[..mid].iter().sum::<u64>() / mid as u64;
-    let newer: u64 = history[mid..].iter().sum::<u64>() / (history.len() - mid) as u64;
+    // SPARKLINE_HISTORY was bumped to 600 to fill wide sparklines, but the
+    // KPI trend arrow should track recent change (~last minute), not the
+    // half-hour average. Cap the sample window before splitting.
+    let window = 60usize.min(history.len());
+    let recent = &history[history.len() - window..];
+    let mid = recent.len() / 2;
+    let older: u64 = recent[..mid].iter().sum::<u64>() / mid as u64;
+    let newer: u64 = recent[mid..].iter().sum::<u64>() / (recent.len() - mid) as u64;
     if newer == older {
         TrendDisplay {
             arrow: "→",

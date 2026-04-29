@@ -2,6 +2,34 @@
 
 All notable changes to NetWatch will be documented in this file.
 
+## [0.14.1] - 2026-04-29
+
+Re-spin of v0.14.0 to correct version metadata. The v0.14.0 commit on
+the tag was missing the Cargo.toml/Cargo.lock bump and CHANGELOG entry
+(staging mistake), so the binaries shipped under v0.14.0 reported
+themselves as `0.14.0-rc.3` internally and `cargo publish` rejected the
+duplicate. v0.14.1 ships the same feature set with consistent version
+metadata across all release channels.
+
+No code changes vs. the intended v0.14.0 — the whole "what's new"
+section below applied to that release and applies here.
+
+## [0.14.0] - 2026-04-29
+
+### Added
+- **Topology view, redesigned** — Local addresses (this host + LAN peers) anchor the left side of the graph, public Internet peers on the right, with ROUTER → ISP as the spine in the middle. Each spine box has a colored health dot pinned to its trunk so router/ISP status is visible at a glance. PR #24.
+- **Auto-traceroute on launch** — A one-shot traceroute to `1.1.1.1` is kicked at startup so the ISP gateway hop populates the topology view without requiring the user to press T. Manual `T` against the selected remote still works.
+- **Real RTT and CPU on Processes tab** — Per-process kernel RTT (min across the process's TCP connections) and CPU% are now wired through to the Processes tab, with rolling history sparklines.
+- **Timeline detectors** — Timeline flags RTT spikes and interface flap events as discrete activity entries.
+
+### Changed
+- **Whole-app design pass** — Dashboard, Connections, Interfaces, Packets, Stats, Topology, Processes, and Insights tabs reworked around the v0.14 design pack. Visual hierarchy, typography, and color usage are now consistent across tabs.
+- **Throughput sparkline fills wide terminals** — Sparkline history was capped at 60 samples (60s @ 1Hz) but the chart could render ~94 cells on a 1200-px terminal, leaving ~36% empty space on the left. History is now capped at 600 samples (10 min). The throughput chart title reflects what's actually drawn (`last 60s` on narrow terminals, `last Nm` on wider ones).
+- **Throughput KPI trend window stays short** — Even with the history extension, the KPI tile's trend arrow continues to compare only the most recent ~minute, so the arrow stays responsive instead of smoothing across the full 10 min.
+
+### Notes
+First non-RC tag in the 0.14 line. Stable `cargo install netwatch-tui` and `brew upgrade` will both pick this up; `0.14.0-rc.1`/`-rc.2`/`-rc.3` remain on crates.io for anyone pinning to a specific RC.
+
 ## [0.13.0] - 2026-04-23
 
 ### Added
