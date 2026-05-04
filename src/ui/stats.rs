@@ -5,7 +5,7 @@ use crate::collectors::packets::CapturedPacket;
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Sparkline},
+    widgets::{Block, Borders, Paragraph},
 };
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
@@ -755,17 +755,21 @@ fn render_throughput_chart(f: &mut Frame, app: &App, area: Rect) {
 
     let rx_padded = pad_history(&agg_rx, chart_w as usize);
     let tx_padded = pad_history(&agg_tx, chart_w as usize);
-    f.render_widget(
-        Sparkline::default()
-            .data(&rx_padded)
-            .style(Style::default().fg(t.rx_rate)),
+    crate::graph::render(
+        f,
         rx_area,
+        &rx_padded,
+        app.graph_style,
+        t.rx_rate,
+        t.status_warn,
     );
-    f.render_widget(
-        Sparkline::default()
-            .data(&tx_padded)
-            .style(Style::default().fg(t.tx_rate)),
+    crate::graph::render(
+        f,
         tx_area,
+        &tx_padded,
+        app.graph_style,
+        t.tx_rate,
+        t.status_warn,
     );
 
     // X-axis labels (last row of inner)

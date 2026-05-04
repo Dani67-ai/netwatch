@@ -5,7 +5,7 @@ use crate::sort::{SortColumn, TabSortState};
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Sparkline},
+    widgets::{Block, Borders, Paragraph},
 };
 use std::collections::HashMap;
 
@@ -207,10 +207,14 @@ fn render_kpi_tile(
             height: inner.height - 1,
         };
         let padded = pad_history(history, spark_area.width as usize);
-        let spark = Sparkline::default()
-            .data(&padded)
-            .style(Style::default().fg(t.rx_rate));
-        f.render_widget(spark, spark_area);
+        crate::graph::render(
+            f,
+            spark_area,
+            &padded,
+            app.graph_style,
+            t.rx_rate,
+            t.status_warn,
+        );
     }
 }
 
@@ -508,16 +512,24 @@ fn render_throughput_chart(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let agg_rx_padded = pad_history(&agg_rx, rx_area.width as usize);
-    let rx_spark = Sparkline::default()
-        .data(&agg_rx_padded)
-        .style(Style::default().fg(t.rx_rate));
-    f.render_widget(rx_spark, rx_area);
+    crate::graph::render(
+        f,
+        rx_area,
+        &agg_rx_padded,
+        app.graph_style,
+        t.rx_rate,
+        t.status_warn,
+    );
 
     let agg_tx_padded = pad_history(&agg_tx, tx_area.width as usize);
-    let tx_spark = Sparkline::default()
-        .data(&agg_tx_padded)
-        .style(Style::default().fg(t.tx_rate));
-    f.render_widget(tx_spark, tx_area);
+    crate::graph::render(
+        f,
+        tx_area,
+        &agg_tx_padded,
+        app.graph_style,
+        t.tx_rate,
+        t.status_warn,
+    );
 
     // x-axis labels
     let axis_y = inner.y + inner.height - 1;
@@ -721,10 +733,14 @@ fn render_top_connections(f: &mut Frame, app: &App, area: Rect) {
                             height: 1,
                         };
                         let padded = pad_history(&data, spark_w);
-                        let spark = Sparkline::default().data(&padded).style(
-                            Style::default().fg(if active { t.rx_rate } else { t.text_muted }),
+                        crate::graph::render(
+                            f,
+                            spark_area,
+                            &padded,
+                            app.graph_style,
+                            if active { t.rx_rate } else { t.text_muted },
+                            t.status_warn,
                         );
-                        f.render_widget(spark, spark_area);
                     }
                 }
             }
@@ -952,10 +968,14 @@ fn render_health_target(
         let data = rtt_history_to_u64(history);
         if !data.is_empty() {
             let padded = pad_history(&data, spark_area.width as usize);
-            let spark = Sparkline::default()
-                .data(&padded)
-                .style(Style::default().fg(dot_color));
-            f.render_widget(spark, spark_area);
+            crate::graph::render(
+                f,
+                spark_area,
+                &padded,
+                app.graph_style,
+                dot_color,
+                app.theme.status_warn,
+            );
         }
     }
 

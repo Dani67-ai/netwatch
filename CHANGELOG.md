@@ -2,6 +2,14 @@
 
 All notable changes to NetWatch will be documented in this file.
 
+## [0.15.0] - 2026-05-04
+
+### Added
+- **Selectable graph styles** — A new `Graph Style` setting (Settings → ←/→) cycles between `bars` (the existing solid-color stacked-block sparkline) and `dots` (a btop-style braille pixel-fill that gives 4× vertical resolution per cell). Persists to `~/.config/netwatch/config.toml` alongside the theme. Applies to every chart in the app — dashboard throughput, interface detail chart, top-connections row sparklines, RTT history, processes RX, stats throughput, and the timeline activity strip.
+
+### Changed
+- **All sparklines route through a single `graph::render` helper** — Per-call-site `Sparkline::default().data().style()` is replaced with `crate::graph::render(...)`. The timeline's three-color severity overlay shares a y-axis via `graph::render_with_max(...)` so layers stay aligned regardless of style. `dots` skips zero samples so flat-zero spans render nothing instead of a baseline floor — keeps stacked overlays clean.
+
 ## [0.14.1] - 2026-04-29
 
 Re-spin of v0.14.0 to correct version metadata. The v0.14.0 commit on

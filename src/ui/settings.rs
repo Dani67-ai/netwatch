@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-pub const SETTINGS_COUNT: usize = 15;
+pub const SETTINGS_COUNT: usize = 16;
 
 pub const TAB_NAMES: &[&str] = &[
     "dashboard",
@@ -36,6 +36,7 @@ pub mod cursor {
     pub const AI_INSIGHTS: usize = 12;
     pub const AI_MODEL: usize = 13;
     pub const AI_ENDPOINT: usize = 14;
+    pub const GRAPH_STYLE: usize = 15;
 }
 
 struct SettingRow {
@@ -121,6 +122,10 @@ fn build_rows(cfg: &NetwatchConfig) -> Vec<SettingRow> {
             label: "AI Endpoint",
             value: cfg.insights_endpoint.clone(),
         },
+        SettingRow {
+            label: "Graph Style",
+            value: cfg.graph_style.clone(),
+        },
     ]
 }
 
@@ -180,7 +185,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
         let value_display = if is_editing {
             format!("{}▏", app.settings_edit_buf)
-        } else if is_selected && (i == cursor::THEME || i == cursor::DEFAULT_TAB) {
+        } else if is_selected
+            && (i == cursor::THEME || i == cursor::DEFAULT_TAB || i == cursor::GRAPH_STYLE)
+        {
             format!("◀ {} ▶", row.value)
         } else {
             row.value.clone()
@@ -232,7 +239,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Cancel"),
         ]
-    } else if app.settings_cursor == cursor::THEME || app.settings_cursor == cursor::DEFAULT_TAB {
+    } else if app.settings_cursor == cursor::THEME
+        || app.settings_cursor == cursor::DEFAULT_TAB
+        || app.settings_cursor == cursor::GRAPH_STYLE
+    {
         vec![
             Span::styled("←→", Style::default().fg(app.theme.key_hint).bold()),
             Span::raw(":Cycle  "),
@@ -284,6 +294,7 @@ pub fn get_edit_value(cfg: &NetwatchConfig, cursor: usize) -> String {
         12 => if cfg.insights_enabled { "on" } else { "off" }.into(),
         13 => cfg.insights_model.clone(),
         14 => cfg.insights_endpoint.clone(),
+        15 => cfg.graph_style.clone(),
         _ => String::new(),
     }
 }
@@ -389,6 +400,16 @@ pub fn apply_edit(cfg: &mut NetwatchConfig, cursor: usize, value: &str) -> Resul
         14 => {
             cfg.insights_endpoint = value.to_string();
             Ok(())
+        }
+        15 => {
+            let valid = crate::graph::GRAPH_STYLE_NAMES;
+            let v = value.to_lowercase();
+            if valid.contains(&v.as_str()) {
+                cfg.graph_style = v;
+                Ok(())
+            } else {
+                Err(format!("Invalid graph style. Use: {}", valid.join(", ")))
+            }
         }
         _ => Err("Unknown setting".into()),
     }

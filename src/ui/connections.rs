@@ -6,7 +6,7 @@ use crate::sort::{
 };
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Clear, Paragraph, Sparkline},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
 pub const COLUMNS: &[SortColumn] = &[
@@ -704,10 +704,14 @@ fn render_detail_right(f: &mut Frame, app: &App, area: Rect, conn: &Connection) 
                 height: area.height.saturating_sub(2),
             };
             let padded = pad_hist(&data, spark_area.width as usize);
-            let spark = Sparkline::default()
-                .data(&padded)
-                .style(Style::default().fg(t.rx_rate));
-            f.render_widget(spark, spark_area);
+            crate::graph::render(
+                f,
+                spark_area,
+                &padded,
+                app.graph_style,
+                t.rx_rate,
+                t.status_warn,
+            );
         }
     }
 }

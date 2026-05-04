@@ -6,7 +6,7 @@ use crate::sort::{apply_direction, cmp_case_insensitive, cmp_f64, SortColumn, Ta
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Sparkline},
+    widgets::{Block, Borders, Paragraph},
 };
 
 pub const COLUMNS: &[SortColumn] = &[
@@ -548,11 +548,13 @@ fn render_rx_chart(f: &mut Frame, app: &App, area: Rect, proc: &ProcessBandwidth
     let chart_area = Rect::new(area.x, area.y + 1, area.width, chart_h);
     if !data.is_empty() {
         let padded = pad_history(&data, area.width as usize);
-        f.render_widget(
-            Sparkline::default()
-                .data(&padded)
-                .style(Style::default().fg(t.rx_rate)),
+        crate::graph::render(
+            f,
             chart_area,
+            &padded,
+            app.graph_style,
+            t.rx_rate,
+            t.status_warn,
         );
     } else {
         f.render_widget(

@@ -377,6 +377,7 @@ pub struct App {
     prev_interface_info: Vec<InterfaceInfo>,
     rtt_sampled_streams: HashSet<u32>,
     pub theme: Theme,
+    pub graph_style: crate::graph::GraphStyle,
     pub process_bandwidth: ProcessBandwidthCollector,
     pub insights_collector: Option<crate::collectors::insights::InsightsCollector>,
     pub sort_picker: crate::ui::sort_picker::SortPickerState,
@@ -411,6 +412,7 @@ impl App {
         };
 
         let theme = crate::theme::by_name(&user_config.theme);
+        let graph_style = crate::graph::by_name(&user_config.graph_style);
 
         let insights_collector = if user_config.insights_enabled {
             Some(crate::collectors::insights::InsightsCollector::new(
@@ -493,6 +495,7 @@ impl App {
             prev_interface_info: Vec::new(),
             rtt_sampled_streams: HashSet::new(),
             theme,
+            graph_style,
             process_bandwidth: ProcessBandwidthCollector::new(),
             insights_collector,
             show_settings: false,
@@ -1452,6 +1455,7 @@ fn handle_settings_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                         app.packet_follow = app.user_config.packet_follow;
                         app.timeline_window = app.user_config.timeline_window_enum();
                         app.theme = crate::theme::by_name(&app.user_config.theme);
+                        app.graph_style = crate::graph::by_name(&app.user_config.graph_style);
                         if (ui::settings::cursor::AI_INSIGHTS..=ui::settings::cursor::AI_ENDPOINT)
                             .contains(&cursor)
                         {
@@ -1538,6 +1542,25 @@ fn handle_settings_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
                 };
                 app.user_config.default_tab = names[next].to_string();
                 app.settings_status = Some(format!("Default tab: {}", names[next]));
+                app.settings_status_tick = 0;
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l')
+                if app.settings_cursor == ui::settings::cursor::GRAPH_STYLE =>
+            {
+                let names = crate::graph::GRAPH_STYLE_NAMES;
+                let current = names
+                    .iter()
+                    .position(|&n| n == app.user_config.graph_style)
+                    .unwrap_or(0);
+                let forward = matches!(key.code, KeyCode::Right | KeyCode::Char('l'));
+                let next = if forward {
+                    (current + 1) % names.len()
+                } else {
+                    (current + names.len() - 1) % names.len()
+                };
+                app.user_config.graph_style = names[next].to_string();
+                app.graph_style = crate::graph::by_name(names[next]);
+                app.settings_status = Some(format!("Graph style: {}", names[next]));
                 app.settings_status_tick = 0;
             }
             KeyCode::Enter => {

@@ -50,6 +50,11 @@ pub struct NetwatchConfig {
 
     /// Color theme (dark, light, ocean, solarized, dracula, nord)
     pub theme: String,
+
+    /// Hero-panel graph style (bars, btop). Applies only to the aggregated
+    /// RX/TX charts on the dashboard and interfaces tabs; in-row sparklines
+    /// always use the default `bars` style regardless of this setting.
+    pub graph_style: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +89,7 @@ impl Default for NetwatchConfig {
             insights_model: "llama3.2".into(),
             insights_endpoint: "local".into(),
             theme: "dark".into(),
+            graph_style: "bars".into(),
         }
     }
 }
@@ -125,6 +131,9 @@ impl NetwatchConfig {
         self.refresh_rate_ms = self.refresh_rate_ms.clamp(100, 5000);
         if self.theme.is_empty() {
             self.theme = "dark".into();
+        }
+        if self.graph_style.is_empty() {
+            self.graph_style = "bars".into();
         }
         if self.default_tab.is_empty() {
             self.default_tab = "dashboard".into();
@@ -236,6 +245,7 @@ show_geo = false
             insights_model: "llama3:8b".into(),
             insights_endpoint: "local".into(),
             theme: "dark".into(),
+            graph_style: "bars".into(),
         };
         let serialized = toml::to_string_pretty(&cfg).unwrap();
         let deserialized: NetwatchConfig = toml::from_str(&serialized).unwrap();

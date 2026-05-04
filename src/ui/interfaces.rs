@@ -6,7 +6,7 @@ use crate::sort::{
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Sparkline},
+    widgets::{Block, Borders, Paragraph},
 };
 
 pub const COLUMNS: &[SortColumn] = &[
@@ -335,10 +335,14 @@ fn render_interface_row(f: &mut Frame, app: &App, inner: Rect, i: usize, iface: 
             };
             let history: Vec<u64> = iface.rx_history.iter().copied().collect();
             let padded = pad_history(&history, spark_w as usize);
-            let spark = Sparkline::default()
-                .data(&padded)
-                .style(Style::default().fg(t.rx_rate));
-            f.render_widget(spark, spark_area);
+            crate::graph::render(
+                f,
+                spark_area,
+                &padded,
+                app.graph_style,
+                t.rx_rate,
+                t.status_warn,
+            );
         }
     }
 }
@@ -578,16 +582,24 @@ fn render_detail_chart(f: &mut Frame, app: &App, area: Rect, iface: &InterfaceTr
     };
 
     let rx_padded = pad_history(&rx_hist, chart_w as usize);
-    let rx_spark = Sparkline::default()
-        .data(&rx_padded)
-        .style(Style::default().fg(t.rx_rate));
-    f.render_widget(rx_spark, rx_area);
+    crate::graph::render(
+        f,
+        rx_area,
+        &rx_padded,
+        app.graph_style,
+        t.rx_rate,
+        t.status_warn,
+    );
 
     let tx_padded = pad_history(&tx_hist, chart_w as usize);
-    let tx_spark = Sparkline::default()
-        .data(&tx_padded)
-        .style(Style::default().fg(t.tx_rate));
-    f.render_widget(tx_spark, tx_area);
+    crate::graph::render(
+        f,
+        tx_area,
+        &tx_padded,
+        app.graph_style,
+        t.tx_rate,
+        t.status_warn,
+    );
 
     // x-axis line
     let axis_y = area.y + area.height - 1;

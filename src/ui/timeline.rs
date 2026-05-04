@@ -5,7 +5,7 @@ use crate::collectors::network_intel::{Alert, AlertSeverity};
 use crate::ui::widgets;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Sparkline},
+    widgets::{Block, Borders, Paragraph},
 };
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
@@ -409,26 +409,34 @@ fn render_activity_strip(f: &mut Frame, app: &App, events: &[Event], area: Rect)
         .unwrap_or(1)
         .max(1);
 
-    f.render_widget(
-        Sparkline::default()
-            .data(&green_data)
-            .max(global_max)
-            .style(Style::default().fg(t.status_good)),
+    // Three overlay layers sharing a y-axis (`global_max`). The renderer
+    // skips zero samples, so each layer paints only its own columns.
+    crate::graph::render_with_max(
+        f,
         inner,
+        &green_data,
+        global_max,
+        app.graph_style,
+        t.status_good,
+        t.status_warn,
     );
-    f.render_widget(
-        Sparkline::default()
-            .data(&yellow_data)
-            .max(global_max)
-            .style(Style::default().fg(t.status_warn)),
+    crate::graph::render_with_max(
+        f,
         inner,
+        &yellow_data,
+        global_max,
+        app.graph_style,
+        t.status_warn,
+        t.status_warn,
     );
-    f.render_widget(
-        Sparkline::default()
-            .data(&red_data)
-            .max(global_max)
-            .style(Style::default().fg(t.status_error)),
+    crate::graph::render_with_max(
+        f,
         inner,
+        &red_data,
+        global_max,
+        app.graph_style,
+        t.status_error,
+        t.status_warn,
     );
 
     // Cyan cursor at the right edge ("now")
