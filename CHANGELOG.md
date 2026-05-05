@@ -2,6 +2,12 @@
 
 All notable changes to NetWatch will be documented in this file.
 
+## [0.15.1] - 2026-05-05
+
+### Fixed
+- **Memory leak under sustained packet capture** — `StreamTracker` retained every unique flow for the lifetime of the process, and the per-IP `rtt_history` map plus the `rtt_sampled_streams` set grew without bound alongside it. On a busy host this drove RSS into the 1 GB+ range after roughly an hour. Stream storage is now an LRU map capped at 1024 flows (with a 256-entry watermark), `rtt_history` keys are bounded to 256 remote IPs (FIFO eviction), and the sampled-streams set self-prunes against the live tracker on every visit. The per-tick deep-clone of all streams in the RTT sampler is also gone, replaced with an in-place visitor. Reported in #27.
+- **`g` toggle on the Connections tab now actually shows GeoIP** — `app.show_geo` was wired to the keybinding but only the Packets tab read it. Connections now renders a `GEO` column (country code plus city when available) between REMOTE and STATE while the toggle is on. Reported in #27.
+
 ## [0.15.0] - 2026-05-04
 
 ### Added
