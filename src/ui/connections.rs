@@ -263,6 +263,27 @@ fn filtered_sorted_conns(app: &App) -> Vec<Connection> {
     conns
 }
 
+/// Compact geo string for the Connections GEO column. Prefers
+/// `country_code-city` (e.g. "US-Ashburn"), falls back to country code, and
+/// returns an em-dash for private/unresolved IPs so the column always has a
+/// glyph to align against. Truncated to fit a 12-char cell at the call site.
+fn format_geo_cell(app: &App, host: &str) -> String {
+    match app.geo_cache.lookup(host) {
+        Some(geo) => {
+            if !geo.country_code.is_empty() && !geo.city.is_empty() {
+                format!("{}-{}", geo.country_code, geo.city)
+            } else if !geo.country_code.is_empty() {
+                geo.country_code
+            } else if !geo.country.is_empty() {
+                geo.country
+            } else {
+                "—".into()
+            }
+        }
+        None => "—".into(),
+    }
+}
+
 fn host_only(addr: &str) -> String {
     if let Some(stripped) = addr.strip_prefix('[') {
         if let Some(end) = stripped.find("]:") {
@@ -303,8 +324,14 @@ fn render_connection_table(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Column header
-    let header_text = "  PROCESS              PROTO  REMOTE                          STATE         RX/s         TX/s     RTT    AGE";
+    // Column header. Mirrors the layout in `render_conn_row`. The GEO column
+    // is only shown when the user has toggled `g`; it sits between REMOTE and
+    // STATE so it qualifies the destination it describes.
+    let header_text: &str = if app.show_geo {
+        "  PROCESS              PROTO  REMOTE                          GEO           STATE         RX/s         TX/s     RTT    AGE"
+    } else {
+        "  PROCESS              PROTO  REMOTE                          STATE         RX/s         TX/s     RTT    AGE"
+    };
     let header_area = Rect {
         x: inner.x + 1,
         y: inner.y,
@@ -413,7 +440,7 @@ fn render_conn_row(
 
     let age_str = connection_age(app, conn);
 
-    let line = Line::from(vec![
+    let mut spans: Vec<Span> = vec![
         Span::styled(
             if is_selected { "▸ " } else { "● " },
             Style::default().fg(if is_selected { t.brand } else { dot_color }),
@@ -432,6 +459,18 @@ fn render_conn_row(
             format!("{:<32}", truncate(&conn.remote_addr, 32)),
             Style::default().fg(t.text_primary),
         ),
+    ];
+
+    if app.show_geo {
+        let host = host_only(&conn.remote_addr);
+        let geo_str = format_geo_cell(app, &host);
+        spans.push(Span::styled(
+            format!(" {:<12}", truncate(&geo_str, 12)),
+            Style::default().fg(t.status_info),
+        ));
+    }
+
+    spans.extend([
         Span::styled(
             format!(" {:<12}", truncate(&conn.state, 12)),
             Style::default().fg(state_color),
@@ -450,6 +489,7 @@ fn render_conn_row(
             Style::default().fg(t.text_muted),
         ),
     ]);
+    let line = Line::from(spans);
 
     let row_area = Rect {
         x: inner.x + 1,

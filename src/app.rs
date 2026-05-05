@@ -25,6 +25,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 const RTT_SPARKLINE_SAMPLES: usize = 20;
+/// Cap distinct remote IPs whose RTT history we retain. The per-IP VecDeque is
+/// already capped by RTT_SPARKLINE_SAMPLES; this caps the *number of keys* so
+/// long-running sessions across many remotes don't grow `rtt_history`
+/// unbounded. FIFO eviction via `rtt_history_order`.
+const MAX_RTT_HISTORY_IPS: usize = 256;
 const PAGE_SCROLL: usize = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -361,8 +366,13 @@ pub struct App {
     health_tick: u32,
     pub user_config: NetwatchConfig,
     pub last_area: Rect,
-    /// Per-remote-IP RTT history for sparklines (keyed by remote IP string)
+    /// Per-remote-IP RTT history for sparklines (keyed by remote IP string).
+    /// Bounded by MAX_RTT_HISTORY_IPS keys; oldest-inserted IP is evicted via
+    /// `rtt_history_order` when a new IP would push the map past the cap.
     pub rtt_history: HashMap<String, VecDeque<f64>>,
+    /// FIFO of remote IPs in the order they first appeared in `rtt_history`.
+    /// Drives bounded eviction when the keyset exceeds MAX_RTT_HISTORY_IPS.
+    rtt_history_order: VecDeque<String>,
     /// Rolling RX rate history per grouped (process, host) for the Dashboard
     /// Top Connections sparkline. Updated each connection-collector tick.
     pub top_conn_history: HashMap<(String, String), VecDeque<u64>>,
@@ -489,6 +499,7 @@ impl App {
             user_config,
             last_area: Rect::default(),
             rtt_history: HashMap::new(),
+            rtt_history_order: VecDeque::new(),
             top_conn_history: HashMap::new(),
             top_proc_rx_history: HashMap::new(),
             iface_events: VecDeque::new(),
@@ -821,27 +832,35 @@ impl App {
     }
 
     fn sample_rtt_from_streams(&mut self) {
-        let streams = self.packet_collector.get_all_streams();
-        for stream in &streams {
-            if self.rtt_sampled_streams.contains(&stream.index) {
-                continue;
+        // Hold each borrow on a local so the closure below doesn't conflict
+        // with the &self that `packet_collector` belongs to.
+        let tracker_arc = std::sync::Arc::clone(&self.packet_collector.stream_tracker);
+        let history = &mut self.rtt_history;
+        let order = &mut self.rtt_history_order;
+        let sampled = &mut self.rtt_sampled_streams;
+        let tracker = tracker_arc.lock().unwrap();
+        tracker.for_each_new_handshake_rtt(sampled, |remote_ip, rtt_ms| {
+            use std::collections::hash_map::Entry;
+            let is_new = matches!(history.entry(remote_ip.to_string()), Entry::Vacant(_));
+            let h = history
+                .entry(remote_ip.to_string())
+                .or_insert_with(|| VecDeque::with_capacity(RTT_SPARKLINE_SAMPLES + 1));
+            h.push_back(rtt_ms);
+            if h.len() > RTT_SPARKLINE_SAMPLES {
+                h.pop_front();
             }
-            if let Some(ref hs) = stream.handshake {
-                if let Some(rtt_ms) = hs.syn_to_syn_ack_ms() {
-                    self.rtt_sampled_streams.insert(stream.index);
-                    // Key by the remote IP (addr_b is typically the server)
-                    let remote_ip = &stream.key.addr_b.0;
-                    let history = self
-                        .rtt_history
-                        .entry(remote_ip.clone())
-                        .or_insert_with(|| VecDeque::with_capacity(RTT_SPARKLINE_SAMPLES + 1));
-                    history.push_back(rtt_ms);
-                    if history.len() > RTT_SPARKLINE_SAMPLES {
-                        history.pop_front();
+            if is_new {
+                order.push_back(remote_ip.to_string());
+                while history.len() > MAX_RTT_HISTORY_IPS {
+                    match order.pop_front() {
+                        Some(old_ip) => {
+                            history.remove(&old_ip);
+                        }
+                        None => break,
                     }
                 }
             }
-        }
+        });
     }
 
     fn feed_network_intel(&mut self) {

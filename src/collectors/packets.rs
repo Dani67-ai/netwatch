@@ -9,6 +9,12 @@ const MAX_PACKETS: usize = 5000; // ring buffer; oldest packets are discarded wh
 const DNS_CACHE_MAX: usize = 4096; // max resolved hostname entries kept in memory
 const MAX_STREAM_SEGMENTS: usize = 10_000; // per-stream segment limit; caps memory per flow
 const MAX_STREAM_BYTES: usize = 2 * 1024 * 1024; // 2 MB per reassembled stream
+                                                 // StreamTracker eviction: cap unique flows to bound memory under sustained capture.
+                                                 // When `all_streams.len()` exceeds MAX_STREAMS + STREAM_EVICT_BATCH we drop the
+                                                 // STREAM_EVICT_BATCH least-recently-seen flows in one sweep (amortized O(1) per
+                                                 // insert). Stream u32 indices are never reused, so evicted indices stay invalid.
+pub(crate) const MAX_STREAMS: usize = 1024;
+pub(crate) const STREAM_EVICT_BATCH: usize = 256;
 const CAPTURE_SNAPLEN: i32 = 65535; // capture full frames (no truncation)
 const CAPTURE_TIMEOUT_MS: i32 = 100; // pcap read timeout; controls batch latency
 const CAPTURE_BATCH_SIZE: usize = 64; // packets processed per tick before yielding
@@ -300,11 +306,17 @@ pub struct Stream {
     pub initiator: Option<(String, u16)>,
     total_payload_bytes: usize,
     pub handshake: Option<TcpHandshake>,
+    /// Monotonic ns timestamp of the last packet seen on this flow. Drives LRU
+    /// eviction when the tracker exceeds MAX_STREAMS.
+    last_seen_ns: u64,
 }
 
 pub struct StreamTracker {
     streams: HashMap<StreamKey, u32>,
-    pub all_streams: Vec<Stream>,
+    /// Keyed by stable u32 index (also stored on `CapturedPacket.stream_index`).
+    /// Index space is monotonic; evicted indices are never reused, so dangling
+    /// references resolve to None rather than aliasing a different flow.
+    pub all_streams: HashMap<u32, Stream>,
     next_index: u32,
 }
 
@@ -318,8 +330,29 @@ impl StreamTracker {
     pub fn new() -> Self {
         Self {
             streams: HashMap::new(),
-            all_streams: Vec::new(),
+            all_streams: HashMap::new(),
             next_index: 0,
+        }
+    }
+
+    /// Drop the LRU batch when over the high-water mark. Removes from both
+    /// `streams` and `all_streams`. Indices stay invalid forever (never reused).
+    fn evict_if_needed(&mut self) {
+        if self.all_streams.len() <= MAX_STREAMS + STREAM_EVICT_BATCH {
+            return;
+        }
+        let mut by_age: Vec<(u64, u32)> = self
+            .all_streams
+            .values()
+            .map(|s| (s.last_seen_ns, s.index))
+            .collect();
+        // Tie-break by index so identical timestamps evict the older flow
+        // (lower index) first; tuples sort lexicographically.
+        by_age.sort_unstable();
+        for &(_, idx) in by_age.iter().take(STREAM_EVICT_BATCH) {
+            if let Some(s) = self.all_streams.remove(&idx) {
+                self.streams.remove(&s.key);
+            }
         }
     }
 
@@ -344,21 +377,32 @@ impl StreamTracker {
             let idx = self.next_index;
             self.next_index += 1;
             self.streams.insert(key.clone(), idx);
-            self.all_streams.push(Stream {
-                index: idx,
-                key: key.clone(),
-                segments: Vec::new(),
-                total_bytes_a_to_b: 0,
-                total_bytes_b_to_a: 0,
-                packet_count: 0,
-                initiator: None,
-                total_payload_bytes: 0,
-                handshake: None,
-            });
+            self.all_streams.insert(
+                idx,
+                Stream {
+                    index: idx,
+                    key: key.clone(),
+                    segments: Vec::new(),
+                    total_bytes_a_to_b: 0,
+                    total_bytes_b_to_a: 0,
+                    packet_count: 0,
+                    initiator: None,
+                    total_payload_bytes: 0,
+                    handshake: None,
+                    last_seen_ns: timestamp_ns,
+                },
+            );
+            self.evict_if_needed();
             idx
         };
 
-        let stream = &mut self.all_streams[stream_index as usize];
+        let stream = match self.all_streams.get_mut(&stream_index) {
+            Some(s) => s,
+            // Race: stream was just evicted. Skip update; the next packet on
+            // this flow will allocate a fresh index.
+            None => return stream_index,
+        };
+        stream.last_seen_ns = timestamp_ns;
         stream.packet_count += 1;
 
         let is_a_to_b = key.addr_a == (src_ip.to_string(), src_port);
@@ -434,7 +478,7 @@ impl StreamTracker {
     }
 
     pub fn get_stream(&self, index: u32) -> Option<&Stream> {
-        self.all_streams.get(index as usize)
+        self.all_streams.get(&index)
     }
 
     /// Cumulative payload bytes per stream, keyed by canonical `StreamKey`.
@@ -443,9 +487,34 @@ impl StreamTracker {
     /// against the connection's own local address.
     pub fn snapshot_bytes(&self) -> HashMap<StreamKey, (u64, u64)> {
         self.all_streams
-            .iter()
+            .values()
             .map(|s| (s.key.clone(), (s.total_bytes_a_to_b, s.total_bytes_b_to_a)))
             .collect()
+    }
+
+    /// Visit each stream that has a completed SYN→SYN-ACK handshake but has
+    /// not yet been recorded in `sampled`, invoking `f(remote_ip, rtt_ms)`.
+    /// Replaces the previous deep-clone-and-iterate pattern that allocated
+    /// every payload byte on every tick. Also prunes evicted indices from
+    /// `sampled` so the set stays bounded by current stream count.
+    pub fn for_each_new_handshake_rtt<F: FnMut(&str, f64)>(
+        &self,
+        sampled: &mut std::collections::HashSet<u32>,
+        mut f: F,
+    ) {
+        for s in self.all_streams.values() {
+            if sampled.contains(&s.index) {
+                continue;
+            }
+            if let Some(ref hs) = s.handshake {
+                if let Some(rtt_ms) = hs.syn_to_syn_ack_ms() {
+                    sampled.insert(s.index);
+                    // Key by remote IP (addr_b is canonically the server side)
+                    f(&s.key.addr_b.0, rtt_ms);
+                }
+            }
+        }
+        sampled.retain(|idx| self.all_streams.contains_key(idx));
     }
 
     pub fn clear(&mut self) {
@@ -677,10 +746,6 @@ impl PacketCollector {
             .unwrap()
             .get_stream(index)
             .cloned()
-    }
-
-    pub fn get_all_streams(&self) -> Vec<Stream> {
-        self.stream_tracker.lock().unwrap().all_streams.clone()
     }
 }
 
@@ -3064,5 +3129,117 @@ mod tests {
         tracker.clear();
         assert!(tracker.all_streams.is_empty());
         assert!(tracker.get_stream(0).is_none());
+    }
+
+    #[test]
+    fn test_stream_tracker_caps_unique_streams() {
+        // Push far more unique flows than the cap allows. Memory must stay
+        // bounded by MAX_STREAMS + STREAM_EVICT_BATCH (the high-water mark);
+        // both the position map and the secondary key→idx map must shrink.
+        let mut tracker = StreamTracker::new();
+        let total = (MAX_STREAMS + STREAM_EVICT_BATCH) * 4;
+        for i in 0..total {
+            let src = format!("10.0.{}.{}", (i / 256) & 0xFF, i & 0xFF);
+            tracker.track_packet(
+                &src,
+                12345,
+                "1.2.3.4",
+                80,
+                StreamProtocol::Tcp,
+                b"",
+                i as u64,
+                "t",
+                Some(TCP_FLAG_SYN),
+                i as u64, // monotonic timestamp_ns: later i => more recent
+            );
+        }
+        let high_water = MAX_STREAMS + STREAM_EVICT_BATCH;
+        assert!(
+            tracker.all_streams.len() <= high_water,
+            "all_streams grew past high-water mark: {}",
+            tracker.all_streams.len()
+        );
+        assert_eq!(
+            tracker.streams.len(),
+            tracker.all_streams.len(),
+            "streams key map drifted from all_streams"
+        );
+        // Surviving streams must be the most-recent ones; the very first
+        // packet's flow was inserted long ago and should have been evicted.
+        let first_flow_key = StreamKey::new(StreamProtocol::Tcp, "10.0.0.0", 12345, "1.2.3.4", 80);
+        assert!(
+            !tracker.streams.contains_key(&first_flow_key),
+            "oldest flow was not evicted"
+        );
+    }
+
+    #[test]
+    fn test_for_each_new_handshake_rtt_prunes_evicted() {
+        // Sample a handshake, then evict that stream by pushing many unseen
+        // flows. The next visitor call must drop the stale index from
+        // `sampled` so the set doesn't grow unbounded across evictions.
+        let mut tracker = StreamTracker::new();
+        // Stream 0: full SYN/SYN-ACK so it has a measurable RTT.
+        tracker.track_packet(
+            "1.1.1.1",
+            1234,
+            "2.2.2.2",
+            80,
+            StreamProtocol::Tcp,
+            b"",
+            0,
+            "t",
+            Some(TCP_FLAG_SYN),
+            1_000_000,
+        );
+        tracker.track_packet(
+            "2.2.2.2",
+            80,
+            "1.1.1.1",
+            1234,
+            StreamProtocol::Tcp,
+            b"",
+            1,
+            "t",
+            Some(TCP_FLAG_SYN | TCP_FLAG_ACK),
+            2_000_000,
+        );
+        let mut sampled = std::collections::HashSet::new();
+        let mut hits: Vec<(String, f64)> = Vec::new();
+        tracker.for_each_new_handshake_rtt(&mut sampled, |ip, rtt| {
+            hits.push((ip.to_string(), rtt));
+        });
+        assert_eq!(hits.len(), 1);
+        assert!(sampled.contains(&0));
+
+        // Now flood with enough new flows to evict index 0. Flood timestamps
+        // must exceed stream 0's last_seen_ns (2_000_000) so the LRU sort puts
+        // stream 0 in the evict batch.
+        let total = MAX_STREAMS + STREAM_EVICT_BATCH * 2;
+        let base_ns: u64 = 10_000_000;
+        for i in 0..total {
+            let src = format!("10.1.{}.{}", (i / 256) & 0xFF, i & 0xFF);
+            let ts = base_ns + i as u64;
+            tracker.track_packet(
+                &src,
+                5000,
+                "9.9.9.9",
+                443,
+                StreamProtocol::Tcp,
+                b"",
+                (10 + i) as u64,
+                "t",
+                Some(TCP_FLAG_SYN),
+                ts,
+            );
+        }
+        assert!(
+            tracker.get_stream(0).is_none(),
+            "test setup: stream 0 should be evicted"
+        );
+
+        // Visitor must scrub the evicted index from `sampled`.
+        tracker.for_each_new_handshake_rtt(&mut sampled, |_, _| {});
+        assert!(!sampled.contains(&0), "evicted index leaked in sampled set");
     }
 }
