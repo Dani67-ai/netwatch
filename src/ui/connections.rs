@@ -210,7 +210,7 @@ fn matches_filter(conn: &crate::collectors::connections::Connection, filter: &st
     process.contains(&needle) || state.contains(&needle) || remote.contains(&needle)
 }
 
-fn filtered_sorted_conns(app: &App) -> Vec<Connection> {
+pub(crate) fn filtered_sorted_conns(app: &App) -> Vec<Connection> {
     let mut conns = app.connection_collector.connections.lock().unwrap().clone();
 
     // Chip-based state filter

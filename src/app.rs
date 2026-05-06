@@ -1050,6 +1050,12 @@ pub async fn run<B: Backend>(
                 }
             }
         }
+
+        // Sync the config's refresh_rate_ms into the EventHandler each
+        // iteration. Idempotent atomic store — saving "Refresh Rate (ms)"
+        // in the settings popup now takes effect on the next poll cycle
+        // without a restart.
+        events.set_tick_rate(app.user_config.refresh_rate_ms);
     }
 }
 
@@ -1242,16 +1248,14 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 let clicked_row = (row - content_top) as usize;
                 match app.current_tab {
                     Tab::Connections if !app.traceroute_view_open => {
-                        // Account for table header row
+                        // Account for table header row. Use the filtered
+                        // list — the unfiltered length would let clicks
+                        // land on rows that aren't visible, and clicks on
+                        // visible rows would index past the filter.
                         if clicked_row > 0 {
                             let visible_row = clicked_row - 1;
-                            let max = app
-                                .connection_collector
-                                .connections
-                                .lock()
-                                .unwrap()
-                                .len()
-                                .saturating_sub(1);
+                            let conns = crate::ui::connections::filtered_sorted_conns(app);
+                            let max = conns.len().saturating_sub(1);
                             let idx = (app.scroll.connection_scroll + visible_row).min(max);
                             app.scroll.connection_scroll = idx;
                         }
@@ -1328,11 +1332,9 @@ fn scroll_tab(app: &mut App, delta: isize) {
                 app.scroll.traceroute_scroll =
                     clamp_scroll(app.scroll.traceroute_scroll, delta, usize::MAX);
             } else {
-                let max = app
-                    .connection_collector
-                    .connections
-                    .lock()
-                    .unwrap()
+                // Clamp against the filtered list so PgDn/arrows can't
+                // land on rows the user isn't seeing (issue #26).
+                let max = crate::ui::connections::filtered_sorted_conns(app)
                     .len()
                     .saturating_sub(1);
                 app.scroll.connection_scroll =
@@ -1902,13 +1904,8 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
             }
         }
         KeyCode::Char('W') if app.current_tab == Tab::Connections => {
-            let mut conns = app.connection_collector.connections.lock().unwrap().clone();
-            let sort_st = app.sort_states.get(&Tab::Connections);
-            crate::ui::connections::sort(
-                &mut conns,
-                sort_st.map(|s| s.column).unwrap_or(0),
-                sort_st.map(|s| s.ascending).unwrap_or(true),
-            );
+            // Operate on what the user sees, not the unfiltered list.
+            let conns = crate::ui::connections::filtered_sorted_conns(app);
             if let Some(conn) = conns.get(app.scroll.connection_scroll) {
                 let (remote_ip, _) = parse_addr_parts(&conn.remote_addr);
                 if let Some(ip) = remote_ip {
@@ -1917,13 +1914,7 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
             }
         }
         KeyCode::Char('T') if app.current_tab == Tab::Connections && !app.traceroute_view_open => {
-            let mut conns = app.connection_collector.connections.lock().unwrap().clone();
-            let sort_st = app.sort_states.get(&Tab::Connections);
-            crate::ui::connections::sort(
-                &mut conns,
-                sort_st.map(|s| s.column).unwrap_or(0),
-                sort_st.map(|s| s.ascending).unwrap_or(true),
-            );
+            let conns = crate::ui::connections::filtered_sorted_conns(app);
             if let Some(conn) = conns.get(app.scroll.connection_scroll) {
                 let (remote_ip, _) = parse_addr_parts(&conn.remote_addr);
                 if let Some(ip) = remote_ip {
@@ -2014,13 +2005,7 @@ fn handle_main_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
             }
         }
         KeyCode::Enter if app.current_tab == Tab::Connections => {
-            let mut conns = app.connection_collector.connections.lock().unwrap().clone();
-            let sort_st = app.sort_states.get(&Tab::Connections);
-            crate::ui::connections::sort(
-                &mut conns,
-                sort_st.map(|s| s.column).unwrap_or(0),
-                sort_st.map(|s| s.ascending).unwrap_or(true),
-            );
+            let conns = crate::ui::connections::filtered_sorted_conns(app);
             if let Some(conn) = conns.get(app.scroll.connection_scroll) {
                 let filter = build_connection_filter(conn);
                 app.packet_filter_text = filter.clone();

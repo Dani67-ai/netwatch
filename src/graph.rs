@@ -113,7 +113,7 @@ fn render_dots(buf: &mut Buffer, area: Rect, data: &[u64], max: u64, color: Colo
     }
     let pix_h = cell_h * 4;
 
-    // Right-align samples: one sample per cell column, two pixel-columns wide.
+    // Right-align samples: one sample per cell column.
     let start = data.len().saturating_sub(cell_w);
     let samples = &data[start..];
 
@@ -127,18 +127,19 @@ fn render_dots(buf: &mut Buffer, area: Rect, data: &[u64], max: u64, color: Colo
             // columns owned by other layers).
             continue;
         }
-        // Highest pixel row (counted from the bottom) that this sample reaches.
-        // Fill every pixel from the bottom up to and including this row.
+        // Highest pixel row (counted from the bottom) that this sample
+        // reaches; fill every pixel from the bottom up to and including
+        // it so the area below the peak is shaded. Only the LEFT
+        // sub-column is lit per cell — half the horizontal density of
+        // the original area plot, giving the classic btop comb look
+        // where adjacent samples sit slightly apart.
         let v = v.min(max);
         let top_pixel_from_bottom = ((v as u128 * (pix_h as u128 - 1)) / max as u128) as usize;
-
         for fill in 0..=top_pixel_from_bottom {
             let pix_y_from_top = (pix_h - 1) - fill;
             let cell_y = pix_y_from_top / 4;
             let row_in_cell = pix_y_from_top % 4;
-            // Light both sub-columns so each filled cell-column is one cell wide.
             masks[cell_y][i] |= 1 << BRAILLE_BIT[0][row_in_cell];
-            masks[cell_y][i] |= 1 << BRAILLE_BIT[1][row_in_cell];
         }
     }
 
